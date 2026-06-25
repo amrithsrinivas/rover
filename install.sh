@@ -1,14 +1,15 @@
 #!/bin/bash
-# Rover — one-command install for Android/Termux
+# Rover — one-command install and launch for Android/Termux
 # Usage: curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/main/install.sh | bash
 
 set -euo pipefail
 
 REPO="https://github.com/amrithsrinivas/rover"
 INSTALL_DIR="$HOME/rover"
+PORT="${1:-9050}"
 
 echo "========================================"
-echo "  Rover — One-Command Install"
+echo "  Rover — Install & Launch"
 echo "========================================"
 echo ""
 
@@ -42,22 +43,13 @@ fi
 # 3. Build the server
 echo "[3/4] Building rover-server (this may take a few minutes)..."
 cd "$INSTALL_DIR"
-cargo build --release -p rover-server 2>&1 | tail -1
+cargo build --release -p rover-server
 echo "  ✓ Build complete"
 
-# 4. Print instructions
-BIN="$INSTALL_DIR/target/release/roverd"
+# 4. Launch the server
 echo ""
-echo "========================================"
-echo "  Install Complete!"
+echo "[4/4] Starting rover-server on port $PORT..."
 echo "========================================"
 echo ""
-echo "  Binary: $BIN"
-echo ""
-echo "  To start the server:"
-echo "    $BIN --port 9050"
-echo ""
-echo "  The server will print a pairing token."
-echo "  Copy that token into the Rover desktop client to connect."
-echo ""
-echo "========================================"
+
+exec "$INSTALL_DIR/target/release/roverd" --port "$PORT"
