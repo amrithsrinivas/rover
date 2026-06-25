@@ -261,7 +261,10 @@ async fn pipe_to_logs(
     let mut lines = buf.lines();
     while let Ok(Some(line)) = lines.next_line().await {
         let now = chrono::Utc::now().timestamp_millis();
-        store.insert_log(&app_id, now, &line, is_stderr).ok();
+        tracing::debug!(app_id=%app_id, line=%line, is_stderr=is_stderr, "log line captured");
+        if let Err(e) = store.insert_log(&app_id, now, &line, is_stderr) {
+            tracing::error!(app_id=%app_id, error=%e, "failed to write log");
+        }
     }
 }
 

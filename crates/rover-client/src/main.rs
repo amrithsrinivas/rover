@@ -264,7 +264,7 @@ impl RoverApp {
                         Task::perform(
                             async move {
                                 let mut rx =
-                                    c3.lock().await.stream_logs(&id_log, true, 200).await?;
+                                    c3.lock().await.stream_logs(&id_log, false, 500).await?;
                                 let mut lines = vec![];
                                 while let Some(Ok(entry)) = rx.recv().await {
                                     lines.push(format!(
