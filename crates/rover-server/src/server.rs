@@ -2,6 +2,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 
 use rover_proto::v1::{
@@ -520,10 +521,91 @@ impl AppService for RoverServer {
 
     async fn shell(
         &self,
-        _request: Request<Streaming<v1::ShellInput>>,
+        request: Request<Streaming<v1::ShellInput>>,
     ) -> Result<Response<Self::ShellStream>, Status> {
-        // Shell implementation in Phase 3
-        Err(Status::unimplemented("shell not implemented yet"))
+        let mut in_stream = request.into_inner();
+        let (tx, rx) = mpsc::channel(64);
+
+        // Spawn a shell process
+        let mut child = tokio::process::Command::new("sh")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| Status::internal(format!("failed to spawn shell: {e}")))?;
+
+        let mut stdin = child.stdin.take().unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let mut stderr = child.stderr.take().unwrap();
+
+        // Forward stdin from the gRPC stream to the shell
+        tokio::spawn(async move {
+            use tokio::io::AsyncWriteExt;
+            while let Some(Ok(input)) = in_stream.next().await {
+                if input.data.is_empty() {
+                    continue;
+                }
+                if stdin.write_all(&input.data).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        // Forward stdout to gRPC stream
+        let tx_out = tx.clone();
+        tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            let mut buf = [0u8; 4096];
+            loop {
+                match stdout.read(&mut buf).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if tx_out
+                            .send(Ok(v1::ShellOutput {
+                                data: buf[..n].to_vec(),
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        // Forward stderr to gRPC stream
+        let tx_err = tx.clone();
+        tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            let mut buf = [0u8; 4096];
+            loop {
+                match stderr.read(&mut buf).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if tx_err
+                            .send(Ok(v1::ShellOutput {
+                                data: buf[..n].to_vec(),
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        // Kill child when client disconnects
+        tokio::spawn(async move {
+            let _ = child.wait().await;
+        });
+
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        Ok(Response::new(Box::pin(stream)))
     }
 }
 

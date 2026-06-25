@@ -50,6 +50,15 @@ pub struct RoverApp {
     // Log streaming
     pub log_entries: Vec<String>,
     pub log_app_id: Option<String>,
+    // Loading state
+    pub loading: bool,
+    // Reconnect
+    pub reconnect_attempts: u32,
+    pub reconnect_addr: Option<String>,
+    pub reconnect_key: Option<String>,
+    // Terminal
+    pub terminal_input: String,
+    pub terminal_output: Vec<String>,
 }
 
 impl RoverApp {
@@ -89,6 +98,12 @@ impl RoverApp {
                 toasts: vec![],
                 log_entries: vec![],
                 log_app_id: None,
+                loading: false,
+                reconnect_attempts: 0,
+                reconnect_addr: None,
+                reconnect_key: None,
+                terminal_input: String::new(),
+                terminal_output: vec![],
             },
             Task::none(),
         )
@@ -133,12 +148,15 @@ impl RoverApp {
             }
             Message::ConnectWithKey(addr, key) => {
                 self.connection_error = None;
+                self.reconnect_addr = Some(addr.clone());
+                self.reconnect_key = Some(key.clone());
                 return Task::perform(connect_with_key(addr, key), |r| match r {
                     Ok(c) => Message::ConnectionSuccess(c, String::new()),
                     Err(e) => Message::ConnectionError(e),
                 });
             }
             Message::ConnectionSuccess(client_arc, api_key) => {
+                let api_key_for_reconnect = api_key.clone();
                 if !api_key.is_empty() {
                     self.profiles.upsert(rover_core::ConnectionProfile {
                         id: uuid::Uuid::new_v4().to_string(),
@@ -151,6 +169,10 @@ impl RoverApp {
                 }
                 self.client = Some(client_arc);
                 self.connected = true;
+                self.connection_error = None;
+                self.reconnect_attempts = 0;
+                self.reconnect_addr = Some(self.address_input.clone());
+                self.reconnect_key = Some(api_key_for_reconnect);
                 self.address_input.clear();
                 self.token_input.clear();
                 self.screen = Screen::Dashboard;
@@ -159,7 +181,18 @@ impl RoverApp {
                     Task::done(Message::RefreshApps),
                 ]);
             }
-            Message::ConnectionError(e) => self.connection_error = Some(e),
+            Message::ConnectionError(e) => {
+                self.connection_error = Some(e);
+                self.loading = false;
+                self.connected = false;
+                if self.reconnect_attempts < 3 && self.reconnect_addr.is_some() {
+                    self.reconnect_attempts += 1;
+                    return Task::perform(
+                        tokio::time::sleep(tokio::time::Duration::from_secs(2)),
+                        |_| Message::RetryConnect,
+                    );
+                }
+            }
             Message::Disconnect => {
                 self.client = None;
                 self.connected = false;
@@ -435,7 +468,37 @@ impl RoverApp {
             Message::SetEnvKey(v) => self.env_key_input = v,
             Message::SetEnvValue(v) => self.env_value_input = v,
             Message::SetEnvSecret(v) => self.env_secret = v,
-            Message::AddEnvVar => { /* TODO */ }
+            Message::AddEnvVar => {
+                if let (Some(app_id), Some(c)) = (&self.selected_app, &self.client) {
+                    let id = app_id.clone();
+                    let key = self.env_key_input.clone();
+                    let value = self.env_value_input.clone();
+                    let is_secret = self.env_secret;
+                    let c2 = c.clone();
+                    self.env_key_input.clear();
+                    self.env_value_input.clear();
+                    self.env_secret = false;
+                    return Task::perform(
+                        async move {
+                            if is_secret {
+                                c2.lock().await.set_secret(&id, &key, &value).await?;
+                            } else {
+                                let mut vars = std::collections::HashMap::new();
+                                vars.insert(key, value);
+                                c2.lock().await.set_env(&id, vars).await?;
+                            }
+                            c2.lock().await.get_app(&id).await.map(Box::new)
+                        },
+                        |r: Result<Box<AppDetailResponse>, String>| match r {
+                            Ok(d) => Message::EnvVarAdded(d),
+                            Err(e) => Message::ToastError(format!("env var: {e}")),
+                        },
+                    );
+                }
+            }
+            Message::EnvVarAdded(d) => {
+                self.app_detail = Some(*d);
+            }
 
             Message::Tick => {
                 if self.connected {
@@ -452,6 +515,22 @@ impl RoverApp {
                     self.toasts.remove(i);
                 }
             }
+            Message::RetryConnect => {
+                if let (Some(addr), Some(key)) =
+                    (self.reconnect_addr.take(), self.reconnect_key.take())
+                {
+                    self.reconnect_attempts += 1;
+                    return Task::done(Message::ConnectWithKey(addr, key));
+                }
+            }
+            Message::SetTerminalInput(v) => self.terminal_input = v,
+            Message::SendTerminalInput => {
+                let cmd = self.terminal_input.clone();
+                self.terminal_output.push(format!("> {cmd}"));
+                self.terminal_input.clear();
+            }
+            Message::TerminalOutput(s) => self.terminal_output.push(s),
+            Message::LoadLogs => {}
             _ => {}
         }
         Task::none()
