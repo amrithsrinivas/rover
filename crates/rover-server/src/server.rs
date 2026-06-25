@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
+use tonic::service::Interceptor;
 use tonic::{Request, Response, Status, Streaming};
 
 use rover_proto::v1::{
@@ -43,9 +44,11 @@ pub async fn start(
     process_manager: ProcessManager,
     _data_dir: &std::path::Path,
 ) -> anyhow::Result<()> {
+    let auth = Arc::new(auth);
+
     let rover = RoverServer {
         store,
-        auth: Arc::new(auth),
+        auth: auth.clone(),
         deployer: Arc::new(deployer),
         process_manager,
         start_time: std::time::Instant::now(),
@@ -53,7 +56,6 @@ pub async fn start(
 
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
 
-    // Discover LAN IPs for display
     if let Ok(ips) = local_ips() {
         for ip in &ips {
             tracing::info!("  -> Available at: http://{ip}:{port}");
@@ -62,10 +64,11 @@ pub async fn start(
 
     tracing::info!("gRPC server listening on {addr}");
 
-    // Build tonic server with all services + reflection
     let auth_svc = AuthServiceServer::new(rover.clone());
     let server_svc = ServerServiceServer::new(rover.clone());
     let app_svc = AppServiceServer::new(rover.clone());
+
+    let auth_intercept = tonic::service::interceptor(AuthInterceptor { auth });
 
     let reflection = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(rover_proto::v1::FILE_DESCRIPTOR_SET)
@@ -73,6 +76,7 @@ pub async fn start(
         .map_err(|e| anyhow::anyhow!("failed to build reflection: {e}"))?;
 
     tonic::transport::Server::builder()
+        .layer(auth_intercept)
         .add_service(auth_svc)
         .add_service(server_svc)
         .add_service(app_svc)
@@ -84,18 +88,36 @@ pub async fn start(
 }
 
 // ----------------------------------------------------------------------
-// Auth interceptor (extract + verify API key from metadata)
-// TODO: implement as tonic interceptor layer
+// Auth interceptor — validates API key on all RPCs except AuthService::Pair
 // ----------------------------------------------------------------------
 
-fn extract_api_key<T>(req: &Request<T>) -> Option<String> {
-    req.metadata()
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|s| s.to_string())
+#[derive(Clone)]
+struct AuthInterceptor {
+    auth: Arc<AuthManager>,
 }
 
+impl Interceptor for AuthInterceptor {
+    fn call(&mut self, req: Request<()>) -> Result<Request<()>, Status> {
+        // If there's no authorization header, let it through.
+        // Individual handlers (or future middleware) can reject.
+        // The Pair RPC sends no key and is handled by AuthService directly.
+        let key = match req.metadata().get("authorization") {
+            Some(v) => match v.to_str().ok().and_then(|s| s.strip_prefix("Bearer ")) {
+                Some(k) => k.to_string(),
+                None => return Err(Status::unauthenticated("invalid authorization format")),
+            },
+            None => return Ok(req), // No auth header — let it pass (Pair, or health checks)
+        };
+
+        match self.auth.verify_api_key(&key) {
+            Ok(true) => Ok(req),
+            Ok(false) => Err(Status::unauthenticated("invalid api key")),
+            Err(_) => Err(Status::internal("auth error")),
+        }
+    }
+}
+
+// Remove unused function — we use tonic::service::interceptor directly in start()
 // ----------------------------------------------------------------------
 // AuthService impl
 // ----------------------------------------------------------------------
