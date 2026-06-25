@@ -510,17 +510,17 @@
 | 4.1.1 | Node runtime: check_installed → `which node` | [x] | |
 | 4.1.2 | Node runtime: build → `npm install` | [x] | |
 | 4.1.3 | Node runtime: run_command → `("node", ["index.js"])` | [x] | |
-| 4.1.4 | Test: deploy Node app | [x] | |
+| 4.1.4 | Test: deploy Node app | [ ] | |
 | 4.1.5 | Go runtime: stub | [x] | |
 | 4.1.6 | Rust runtime: stub | [x] | |
 
 ### 4.2 — App Polish
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 4.2.1 | App icon (all platforms) | [x] | |
-| 4.2.2 | About dialog (version, license, credits) | [x] | |
+| 4.2.1 | App icon (all platforms) | [ ] | |
+| 4.2.2 | About dialog (version, license, credits) | [ ] | |
 | 4.2.3 | Window title: "Rover" + connection status indicator | [x] | |
-| 4.2.4 | Keyboard shortcuts (Cmd+R refresh, Cmd+D deploy, Cmd+, settings) | [x] | |
+| 4.2.4 | Keyboard shortcuts (Cmd+R refresh, Cmd+D deploy, Cmd+, settings) | [ ] | |
 | 4.2.5 | Empty states: "No apps deployed yet" with deploy CTA | [x] | |
 | 4.2.6 | "No connections" state with setup instructions | [x] | |
 
@@ -529,19 +529,19 @@
 |---|------|--------|-------|
 | 4.3.1 | Cross-compile server for aarch64-unknown-linux-gnu (Termux) | [x] | |
 | 4.3.2 | Build client for macOS (aarch64 + x86_64) | [x] | |
-| 4.3.3 | Build client for Windows | [x] | |
-| 4.3.4 | Build client for Linux | [x] | |
-| 4.3.5 | Release script or CI config | [x] | |
-| 4.3.6 | Binary size optimization (LTO, strip) | [x] | |
+| 4.3.3 | Build client for Windows | [ ] | |
+| 4.3.4 | Build client for Linux | [ ] | |
+| 4.3.5 | Release script or CI config | [ ] | |
+| 4.3.6 | Binary size optimization (LTO, strip) | [ ] | |
 
 ### 4.4 — Documentation
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 4.4.1 | README: project description, features, screenshots | [x] | |
-| 4.4.2 | README: prerequisites (Termux packages: python, openssl, etc.) | [x] | |
-| 4.4.3 | README: install instructions (download binary / build from source) | [x] | |
+| 4.4.2 | README: prerequisites (Termux packages: python, openssl, etc.) | [ ] | |
+| 4.4.3 | README: install instructions (download binary / build from source) | [ ] | |
 | 4.4.4 | README: quick start (start server, connect client, deploy app) | [x] | |
-| 4.4.5 | README: rover.toml manifest reference | [x] | |
+| 4.4.5 | README: rover.toml manifest reference | [ ] | |
 
 ---
 
@@ -550,22 +550,22 @@
 ### 5.1 — Relay Server
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 5.1.1 | `rover-relay` binary scaffold | [x] | |
-| 5.1.2 | Accept WebSocket connections from servers | [x] | |
-| 5.1.3 | Accept WebSocket connections from clients | [x] | |
-| 5.1.4 | Bridge: forward data between paired server/client sessions | [x] | |
-| 5.1.5 | Session pairing by token/ID | [x] | |
-| 5.1.6 | Auto-cleanup dead sessions | [x] | |
+| 5.1.1 | `rover-relay` binary scaffold | [ ] | |
+| 5.1.2 | Accept WebSocket connections from servers | [ ] | |
+| 5.1.3 | Accept WebSocket connections from clients | [ ] | |
+| 5.1.4 | Bridge: forward data between paired server/client sessions | [ ] | |
+| 5.1.5 | Session pairing by token/ID | [ ] | |
+| 5.1.6 | Auto-cleanup dead sessions | [ ] | |
 
 ### 5.2 — Relay Transport Implementation
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 5.2.1 | `RelayTransportServer`: connect to relay via WebSocket | [x] | |
-| 5.2.2 | `RelayTransportClient`: connect to relay via WebSocket | [x] | |
-| 5.2.3 | Tunnel gRPC over WebSocket frames | [x] | |
-| 5.2.4 | Auto-reconnect on connection drop | [x] | |
-| 5.2.5 | Client: add relay address option in connection form | [x] | |
-| 5.2.6 | Client: show relay connection status | [x] | |
+| 5.2.1 | `RelayTransportServer`: connect to relay via WebSocket | [ ] | |
+| 5.2.2 | `RelayTransportClient`: connect to relay via WebSocket | [ ] | |
+| 5.2.3 | Tunnel gRPC over WebSocket frames | [ ] | |
+| 5.2.4 | Auto-reconnect on connection drop | [ ] | |
+| 5.2.5 | Client: add relay address option in connection form | [ ] | |
+| 5.2.6 | Client: show relay connection status | [ ] | |
 
 ---
 
@@ -574,14 +574,14 @@
 | Phase | Items | Done | In Progress | Remaining |
 |-------|-------|------|-------------|-----------|
 | 0: Foundation | 35 | 35 | 0 | 0 |
-| 1A: Server Core | 74 | 70 | 0 | 4 |
+| 1A: Server Core | 74 | 74 | 0 | 0 |
 | 1B: Client Core | 52 | 52 | 0 | 0 |
 | 2A: Server Streaming | 13 | 13 | 0 | 0 |
 | 2B: Client Streaming UI | 19 | 19 | 0 | 0 |
 | 3: Advanced Features | 24 | 24 | 0 | 0 |
-| 4: Polish & Release | 20 | 0 | 0 | 20 |
+| 4: Polish & Release | 20 | 11 | 0 | 9 |
 | 5: Relay (Future) | 12 | 0 | 0 | 12 |
-| **Total** | **249** | **213** | **0** | **36** |
+| **Total** | **249** | **223** | **0** | **26** |
 
 ---
 

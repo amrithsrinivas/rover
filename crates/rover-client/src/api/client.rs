@@ -11,6 +11,39 @@ use tonic::Request;
 use tonic::metadata::MetadataValue;
 use tonic::transport::Channel;
 
+/// Convert a tonic Status into a human-readable error message.
+fn readable_error(rpc: &str, status: tonic::Status) -> String {
+    let msg = status.message().to_string();
+    let code = status.code();
+
+    // Connection errors
+    if msg.contains("transport error")
+        || msg.contains("tcp connect")
+        || msg.contains("connection refused")
+        || msg.contains("connect error")
+    {
+        return "Could not reach the server. Is it running and on the same network?".into();
+    }
+
+    // Timeout
+    if msg.contains("timeout") || msg.contains("deadline") {
+        return "Request timed out. The server may be overloaded or unreachable.".into();
+    }
+
+    // Auth errors
+    if code == tonic::Code::Unauthenticated {
+        return "Authentication failed. Try reconnecting with a new pairing token.".into();
+    }
+
+    // Not found
+    if code == tonic::Code::NotFound {
+        return format!("Not found: {msg}");
+    }
+
+    // Generic
+    format!("{rpc}: {msg}")
+}
+
 /// Wraps the gRPC client connections for all Rover services.
 pub struct RoverClient {
     pub channel: Channel,
@@ -33,10 +66,13 @@ impl RoverClient {
     pub async fn connect(address: &str) -> Result<Self, String> {
         let uri = format!("http://{address}");
         let channel = Channel::from_shared(uri)
-            .map_err(|e| format!("invalid address: {e}"))?
+            .map_err(|e| format!("invalid address '{address}': {e}"))?
             .connect()
             .await
-            .map_err(|e| format!("connection failed: {e}"))?;
+            .map_err(|_| {
+                "Could not connect to server. Is it running and on the same Wi-Fi network?"
+                    .to_string()
+            })?;
 
         Ok(Self {
             auth: AuthServiceClient::new(channel.clone()),
@@ -56,7 +92,7 @@ impl RoverClient {
             .auth
             .pair(req)
             .await
-            .map_err(|e| format!("pair failed: {e}"))?
+            .map_err(|e| readable_error("pair", e))?
             .into_inner();
         self.api_key = Some(resp.api_key.clone());
         Ok(resp)
@@ -85,7 +121,7 @@ impl RoverClient {
             .server
             .get_info(req)
             .await
-            .map_err(|e| format!("get_info: {e}"))?
+            .map_err(|e| readable_error("get_info", e))?
             .into_inner())
     }
 
@@ -96,7 +132,7 @@ impl RoverClient {
             .server
             .get_metrics(req)
             .await
-            .map_err(|e| format!("get_metrics: {e}"))?
+            .map_err(|e| readable_error("get_metrics", e))?
             .into_inner())
     }
 
@@ -112,7 +148,7 @@ impl RoverClient {
             .server
             .list_apps(req)
             .await
-            .map_err(|e| format!("list_apps: {e}"))?
+            .map_err(|e| readable_error("list_apps", e))?
             .into_inner())
     }
 
@@ -127,7 +163,7 @@ impl RoverClient {
             .app
             .get_app(req)
             .await
-            .map_err(|e| format!("get_app: {e}"))?
+            .map_err(|e| readable_error("get_app", e))?
             .into_inner())
     }
 
@@ -140,7 +176,7 @@ impl RoverClient {
             .app
             .start_app(req)
             .await
-            .map_err(|e| format!("start_app: {e}"))?
+            .map_err(|e| readable_error("start_app", e))?
             .into_inner())
     }
 
@@ -153,7 +189,7 @@ impl RoverClient {
             .app
             .stop_app(req)
             .await
-            .map_err(|e| format!("stop_app: {e}"))?
+            .map_err(|e| readable_error("stop_app", e))?
             .into_inner())
     }
 
@@ -166,7 +202,7 @@ impl RoverClient {
             .app
             .restart_app(req)
             .await
-            .map_err(|e| format!("restart_app: {e}"))?
+            .map_err(|e| readable_error("restart_app", e))?
             .into_inner())
     }
 
@@ -178,7 +214,7 @@ impl RoverClient {
         self.app
             .delete_app(req)
             .await
-            .map_err(|e| format!("delete_app: {e}"))?;
+            .map_err(|e| readable_error("delete_app", e))?;
         Ok(())
     }
 
@@ -196,7 +232,7 @@ impl RoverClient {
             .app
             .set_env(req)
             .await
-            .map_err(|e| format!("set_env: {e}"))?
+            .map_err(|e| readable_error("set_env", e))?
             .into_inner())
     }
 
@@ -214,7 +250,7 @@ impl RoverClient {
             .app
             .delete_env(req)
             .await
-            .map_err(|e| format!("delete_env: {e}"))?
+            .map_err(|e| readable_error("delete_env", e))?
             .into_inner())
     }
 
@@ -228,7 +264,7 @@ impl RoverClient {
         self.app
             .set_secret(req)
             .await
-            .map_err(|e| format!("set_secret: {e}"))?;
+            .map_err(|e| readable_error("set_secret", e))?;
         Ok(())
     }
 
@@ -255,7 +291,7 @@ impl RoverClient {
             .app
             .deploy(req)
             .await
-            .map_err(|e| format!("deploy: {e}"))?
+            .map_err(|e| readable_error("deploy", e))?
             .into_inner();
 
         let (tx, rx) = mpsc::channel(64);
@@ -294,7 +330,7 @@ impl RoverClient {
             .app
             .stream_logs(req)
             .await
-            .map_err(|e| format!("stream_logs: {e}"))?
+            .map_err(|e| readable_error("stream_logs", e))?
             .into_inner();
 
         let (tx, rx) = mpsc::channel(64);

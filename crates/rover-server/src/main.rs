@@ -67,7 +67,10 @@ async fn main() -> anyhow::Result<()> {
     // Initialize runtime registry
     let registry = runtime::RuntimeRegistry::new();
     registry.register(runtime::python::PythonRuntime::new());
-    tracing::info!("Runtimes available: python");
+    registry.register(runtime::node::NodeRuntime::new());
+    registry.register(runtime::go::GoRuntime::new());
+    registry.register(runtime::rust::RustRuntime::new());
+    tracing::info!("Runtimes available: python, node, go, rust");
 
     // Initialize process manager
     let process_manager = process::ProcessManager::new(store.clone());

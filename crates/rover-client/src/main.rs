@@ -3,7 +3,9 @@ mod message;
 mod theme;
 
 use api::client::RoverClient;
-use iced::widget::{Space, button, column, container, row, scrollable, text, text_input};
+use iced::widget::{
+    Space, button, column, container, pick_list, row, scrollable, text, text_input,
+};
 use iced::{Element, Length, Size, Task};
 use message::Message;
 use rover_proto::v1::{
@@ -42,6 +44,9 @@ pub struct RoverApp {
     pub deploy_source_path: String,
     pub deploying: bool,
     pub deploy_log: Vec<String>,
+    pub deploy_env_vars: Vec<(String, String)>,
+    pub deploy_env_key: String,
+    pub deploy_env_value: String,
     pub env_key_input: String,
     pub env_value_input: String,
     pub env_secret: bool,
@@ -94,6 +99,9 @@ impl RoverApp {
                 deploy_source_path: String::new(),
                 deploying: false,
                 deploy_log: vec![],
+                deploy_env_vars: vec![],
+                deploy_env_key: String::new(),
+                deploy_env_value: String::new(),
                 env_key_input: String::new(),
                 env_value_input: String::new(),
                 env_secret: false,
@@ -411,14 +419,60 @@ impl RoverApp {
                 self.deploy_run_cmd = "python3 main.py".into();
                 self.deploy_runtime = "python".into();
                 self.deploy_source_path.clear();
+                self.deploy_env_vars.clear();
+                self.deploy_env_key.clear();
+                self.deploy_env_value.clear();
                 self.deploying = false;
                 self.deploy_log.clear();
             }
             Message::SetDeployName(v) => self.deploy_name = v,
             Message::SetDeployBuildCmd(v) => self.deploy_build_cmd = v,
             Message::SetDeployRunCmd(v) => self.deploy_run_cmd = v,
-            Message::SetDeployRuntime(v) => self.deploy_runtime = v,
+            Message::SetDeployRuntime(v) => {
+                self.deploy_runtime = v.clone();
+                // Auto-fill build/run commands for the selected runtime
+                let (build, run) = match v.as_str() {
+                    "python" => ("pip install -r requirements.txt", "python main.py"),
+                    "node" => ("npm install", "node index.js"),
+                    "go" => ("go build -o app .", "./app"),
+                    "rust" => ("cargo build --release", "./target/release/app"),
+                    _ => ("", ""),
+                };
+                // Only auto-fill if the fields are empty or match a previous default
+                if self.deploy_build_cmd.is_empty()
+                    || self.deploy_build_cmd == "pip install -r requirements.txt"
+                    || self.deploy_build_cmd == "npm install"
+                    || self.deploy_build_cmd == "go build -o app ."
+                    || self.deploy_build_cmd == "cargo build --release"
+                {
+                    self.deploy_build_cmd = build.to_string();
+                }
+                if self.deploy_run_cmd.is_empty()
+                    || self.deploy_run_cmd == "python main.py"
+                    || self.deploy_run_cmd == "node index.js"
+                    || self.deploy_run_cmd == "./app"
+                    || self.deploy_run_cmd == "./target/release/app"
+                {
+                    self.deploy_run_cmd = run.to_string();
+                }
+            }
             Message::SetDeploySourcePath(v) => self.deploy_source_path = v,
+            Message::SetDeployEnvKey(v) => self.deploy_env_key = v,
+            Message::SetDeployEnvValue(v) => self.deploy_env_value = v,
+            Message::AddDeployEnvVar => {
+                let k = self.deploy_env_key.trim().to_string();
+                let v = self.deploy_env_value.trim().to_string();
+                if !k.is_empty() && !v.is_empty() {
+                    self.deploy_env_vars.push((k, v));
+                    self.deploy_env_key.clear();
+                    self.deploy_env_value.clear();
+                }
+            }
+            Message::RemoveDeployEnvVar(i) => {
+                if i < self.deploy_env_vars.len() {
+                    self.deploy_env_vars.remove(i);
+                }
+            }
             Message::PickSourceDirectory => {
                 return Task::perform(
                     async {
@@ -443,9 +497,13 @@ impl RoverApp {
                 self.deploy_log.push("Packaging source...".into());
 
                 let app_name = self.deploy_name.clone();
-                let manifest = format!(
-                    "[app]\nname = \"{}\"\nruntime = \"{}\"\ntype = \"service\"\n\n[build]\ncommand = \"{}\"\n\n[run]\ncommand = \"{}\"\n",
-                    app_name, self.deploy_runtime, self.deploy_build_cmd, self.deploy_run_cmd,
+                let env_vars = self.deploy_env_vars.clone();
+                let manifest = build_manifest_preview(
+                    &app_name,
+                    &self.deploy_runtime,
+                    &self.deploy_build_cmd,
+                    &self.deploy_run_cmd,
+                    &env_vars,
                 );
                 let source_path = self.deploy_source_path.clone();
 
@@ -1026,9 +1084,12 @@ impl RoverApp {
                 text_input("Run command", &self.deploy_run_cmd)
                     .on_input(Message::SetDeployRunCmd)
                     .padding(8),
-                text_input("Runtime (python/node/go/rust)", &self.deploy_runtime)
-                    .on_input(Message::SetDeployRuntime)
-                    .padding(8),
+                pick_list(
+                    &["python", "node", "go", "rust"][..],
+                    Some(&self.deploy_runtime[..]),
+                    |s| Message::SetDeployRuntime(s.to_string()),
+                )
+                .placeholder("Select runtime"),
                 row![
                     text_input("Source directory", &self.deploy_source_path)
                         .on_input(Message::SetDeploySourcePath)
@@ -1038,6 +1099,76 @@ impl RoverApp {
                     button(text("Browse...")).on_press(Message::PickSourceDirectory)
                 ],
                 Space::new(0, 12),
+                // Env vars
+                text("Environment Variables").size(14),
+                if self.deploy_env_vars.is_empty() {
+                    let empty: Element<'_, Message> = text("None")
+                        .size(12)
+                        .color(theme::colors::TEXT_MUTED)
+                        .into();
+                    empty
+                } else {
+                    column(
+                        self.deploy_env_vars
+                            .iter()
+                            .enumerate()
+                            .map(|(i, (k, v))| {
+                                row![
+                                    text(format!("{k}={v}")).size(12).width(Length::Fill),
+                                    button(text("✕").size(12))
+                                        .on_press(Message::RemoveDeployEnvVar(i)),
+                                ]
+                                .align_y(iced::Alignment::Center)
+                                .into()
+                            })
+                            .collect::<Vec<Element<'_, Message>>>(),
+                    )
+                    .spacing(2)
+                    .into()
+                },
+                row![
+                    text_input("KEY", &self.deploy_env_key)
+                        .on_input(Message::SetDeployEnvKey)
+                        .padding(6)
+                        .width(150),
+                    Space::new(8, 0),
+                    text_input("VALUE", &self.deploy_env_value)
+                        .on_input(Message::SetDeployEnvValue)
+                        .padding(6)
+                        .width(250),
+                    Space::new(8, 0),
+                    button(text("+ Add")).on_press(Message::AddDeployEnvVar),
+                ],
+                Space::new(0, 12),
+                // Manifest preview
+                if !self.deploy_name.is_empty() && !self.deploy_source_path.is_empty() {
+                    let preview = build_manifest_preview(
+                        &self.deploy_name,
+                        &self.deploy_runtime,
+                        &self.deploy_build_cmd,
+                        &self.deploy_run_cmd,
+                        &self.deploy_env_vars,
+                    );
+                    let preview_text: Element<'_, Message> =
+                        text(preview).size(11).font(iced::Font::MONOSPACE).into();
+                    let preview_block: Element<'_, Message> = container(scrollable(preview_text))
+                        .style(|_: &iced::Theme| container::Style {
+                            background: Some(iced::Color::from_rgb(0.05, 0.05, 0.08).into()),
+                            border: iced::Border {
+                                color: theme::colors::BORDER,
+                                width: 1.0,
+                                radius: 4.0.into(),
+                            },
+                            ..container::Style::default()
+                        })
+                        .padding(10)
+                        .height(120)
+                        .into();
+                    preview_block
+                } else {
+                    Space::new(0, 0).into()
+                },
+                Space::new(0, 8),
                 button(text(if self.deploying {
                     "Deploying..."
                 } else {
@@ -1125,6 +1256,41 @@ async fn connect_with_key(addr: String, key: String) -> Result<Arc<Mutex<RoverCl
     client.set_api_key(&key);
     client.get_info().await?;
     Ok(Arc::new(Mutex::new(client)))
+}
+
+fn build_manifest_preview(
+    name: &str,
+    runtime: &str,
+    build_cmd: &str,
+    run_cmd: &str,
+    env_vars: &[(String, String)],
+) -> String {
+    use std::collections::BTreeMap;
+    let mut app = toml::map::Map::new();
+    app.insert("name".into(), toml::Value::String(name.to_string()));
+    app.insert("runtime".into(), toml::Value::String(runtime.to_string()));
+    app.insert("type".into(), toml::Value::String("service".into()));
+
+    let mut build = toml::map::Map::new();
+    build.insert("command".into(), toml::Value::String(build_cmd.to_string()));
+
+    let mut run = toml::map::Map::new();
+    run.insert("command".into(), toml::Value::String(run_cmd.to_string()));
+
+    let mut root = toml::map::Map::new();
+    root.insert("app".into(), toml::Value::Table(app));
+    root.insert("build".into(), toml::Value::Table(build));
+    root.insert("run".into(), toml::Value::Table(run));
+
+    if !env_vars.is_empty() {
+        let mut env = toml::map::Map::new();
+        for (k, v) in env_vars {
+            env.insert(k.clone(), toml::Value::String(v.clone()));
+        }
+        root.insert("env".into(), toml::Value::Table(env));
+    }
+
+    toml::to_string_pretty(&root).unwrap_or_else(|e| format!("error building manifest: {e}"))
 }
 
 fn package_source(dir: &str) -> anyhow::Result<Vec<u8>> {

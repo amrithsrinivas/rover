@@ -1,4 +1,7 @@
+pub mod go;
+pub mod node;
 pub mod python;
+pub mod rust;
 
 use async_trait::async_trait;
 use std::collections::HashMap;

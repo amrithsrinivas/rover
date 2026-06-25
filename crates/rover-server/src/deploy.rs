@@ -195,8 +195,9 @@ async fn run_deploy(
     let build_tx = tx.clone();
     let build_dir = source_dir.clone();
     let build_cmd_owned = build_cmd.to_string();
+    let build_env = env_vars.clone();
     let build_result = tokio::task::spawn_blocking(move || {
-        run_build_and_stream(&build_dir, &build_cmd_owned, &build_tx)
+        run_build_and_stream(&build_dir, &build_cmd_owned, &build_tx, &build_env)
     })
     .await??;
     tracing::info!(app_id=%app_id, ?build_result, "build finished");
@@ -238,6 +239,7 @@ fn run_build_and_stream(
     dir: &Path,
     command: &str,
     tx: &mpsc::Sender<DeployEvent>,
+    env_vars: &std::collections::HashMap<String, String>,
 ) -> anyhow::Result<std::process::ExitStatus> {
     use std::io::{BufRead, BufReader};
     use std::process::Command;
@@ -246,6 +248,7 @@ fn run_build_and_stream(
         .arg("-c")
         .arg(command)
         .current_dir(dir)
+        .envs(env_vars)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()?;
