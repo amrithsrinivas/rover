@@ -3493,6 +3493,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "flate2",
  "iced",
  "prost",
  "rfd",
@@ -3503,12 +3504,15 @@ dependencies = [
  "rover-transport-relay",
  "serde",
  "serde_json",
+ "tar",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "walkdir",
 ]
 
 [[package]]

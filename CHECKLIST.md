@@ -576,12 +576,12 @@
 | 0: Foundation | 35 | 35 | 0 | 0 |
 | 1A: Server Core | 74 | 70 | 0 | 4 |
 | 1B: Client Core | 52 | 52 | 0 | 0 |
-| 2A: Server Streaming | 13 | 0 | 0 | 13 |
-| 2B: Client Streaming UI | 19 | 0 | 0 | 19 |
+| 2A: Server Streaming | 13 | 13 | 0 | 0 |
+| 2B: Client Streaming UI | 19 | 19 | 0 | 0 |
 | 3: Advanced Features | 24 | 0 | 0 | 24 |
 | 4: Polish & Release | 20 | 0 | 0 | 20 |
 | 5: Relay (Future) | 12 | 0 | 0 | 12 |
-| **Total** | **249** | **157** | **0** | **92** |
+| **Total** | **249** | **189** | **0** | **60** |
 
 ---
 

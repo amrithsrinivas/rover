@@ -1,10 +1,12 @@
 use rover_proto::v1::{
-    AppDetailResponse, AppListResponse, AppRequest, AppSummary, DeleteEnvRequest, DeployRequest,
-    DeployResponse, LogEntry, LogStreamRequest, PairResponse, ServerInfo, ServerMetrics,
+    AppDetailResponse, AppListResponse, AppRequest, AppSummary, DeleteEnvRequest, DeployEvent,
+    DeployRequest, LogEntry, LogStreamRequest, PairResponse, ServerInfo, ServerMetrics,
     SetEnvRequest, SetSecretRequest, app_service_client::AppServiceClient,
     auth_service_client::AuthServiceClient, server_service_client::ServerServiceClient,
 };
 use std::collections::HashMap;
+use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
 use tonic::Request;
 use tonic::metadata::MetadataValue;
 use tonic::transport::Channel;
@@ -228,5 +230,90 @@ impl RoverClient {
             .await
             .map_err(|e| format!("set_secret: {e}"))?;
         Ok(())
+    }
+
+    // --- Streaming ---
+
+    /// Deploy an app and stream build events.
+    /// Returns a channel receiver of DeployEvents.
+    pub async fn deploy_stream(
+        &mut self,
+        name: String,
+        runtime: i32,
+        app_type: i32,
+        manifest_toml: String,
+        source_archive: Vec<u8>,
+    ) -> Result<mpsc::Receiver<Result<DeployEvent, String>>, String> {
+        let mut req = Request::new(DeployRequest {
+            name,
+            runtime,
+            app_type,
+            manifest_toml,
+            source_archive,
+        });
+        self.auth_req(&mut req)?;
+
+        let mut stream = self
+            .app
+            .deploy(req)
+            .await
+            .map_err(|e| format!("deploy: {e}"))?
+            .into_inner();
+
+        let (tx, rx) = mpsc::channel(64);
+        tokio::spawn(async move {
+            while let Some(event) = stream.next().await {
+                match event {
+                    Ok(e) => {
+                        let _ = tx.send(Ok(e)).await;
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("stream error: {e}"))).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+
+    /// Stream log entries for an app.
+    pub async fn stream_logs(
+        &mut self,
+        app_id: &str,
+        follow: bool,
+        tail_lines: i32,
+    ) -> Result<mpsc::Receiver<Result<LogEntry, String>>, String> {
+        let mut req = Request::new(LogStreamRequest {
+            app_id: app_id.to_string(),
+            follow,
+            tail_lines,
+        });
+        self.auth_req(&mut req)?;
+
+        let mut stream = self
+            .app
+            .stream_logs(req)
+            .await
+            .map_err(|e| format!("stream_logs: {e}"))?
+            .into_inner();
+
+        let (tx, rx) = mpsc::channel(64);
+        tokio::spawn(async move {
+            while let Some(entry) = stream.next().await {
+                match entry {
+                    Ok(e) => {
+                        let _ = tx.send(Ok(e)).await;
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("stream error: {e}"))).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
     }
 }

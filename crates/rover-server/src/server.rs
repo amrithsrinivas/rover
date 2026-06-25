@@ -218,16 +218,16 @@ impl AppService for RoverServer {
 
         let event_rx = self
             .deployer
-            .deploy(&manifest, &req.source_archive)
+            .deploy(&manifest, req.source_archive)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
         let stream = tokio_stream::wrappers::ReceiverStream::new(event_rx).map(|event| {
             Ok(match event {
-                crate::deploy::DeployEvent::Log(line) => v1::DeployEvent {
+                crate::deploy::DeployEvent::Log { line, is_stderr } => v1::DeployEvent {
                     event: Some(v1::deploy_event::Event::Log(v1::DeployLogLine {
                         line,
-                        is_stderr: false,
+                        is_stderr,
                     })),
                 },
                 crate::deploy::DeployEvent::Complete { app_id } => v1::DeployEvent {

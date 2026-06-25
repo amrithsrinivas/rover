@@ -1,18 +1,15 @@
-use rover_proto::v1::{AppDetailResponse, AppSummary, ServerInfo, ServerMetrics};
+use crate::api::client::RoverClient;
+use rover_proto::v1::{
+    AppDetailResponse, AppSummary, DeployEvent, LogEntry, ServerInfo, ServerMetrics,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::api::client::RoverClient;
-
-/// Message enum for all UI events and async responses.
 #[derive(Debug, Clone)]
 pub enum Message {
-    // Navigation
     Navigate(crate::Screen),
     Tick,
     Noop,
-
-    // Connection form
     SetAddressInput(String),
     SetTokenInput(String),
     SetProfileName(String),
@@ -22,25 +19,21 @@ pub enum Message {
     ConnectionError(String),
     Disconnect,
     DeleteProfile(String),
-
-    // Server data
     Refresh,
     RefreshApps,
     DataRefreshed(Box<ServerInfo>, Box<ServerMetrics>),
     AppsRefreshed(Vec<AppSummary>),
-
-    // App detail
     SelectApp(String),
     AppDetailLoaded(Box<AppDetailResponse>),
+    LogLinesReceived(Vec<String>),
     StartApp(String),
     StopApp(String),
     RestartApp(String),
     DeleteApp(String),
-
-    // Deploy
     Deploy,
     SubmitDeploy,
     DeployComplete,
+    DeployStreamDone(Vec<rover_proto::v1::deploy_event::Event>),
     DeployError(String),
     SetDeployName(String),
     SetDeployBuildCmd(String),
@@ -49,15 +42,11 @@ pub enum Message {
     SetDeployAppType(String),
     SetDeploySourcePath(String),
     PickSourceDirectory,
-
-    // Env vars
     SetEnvKey(String),
     SetEnvValue(String),
     SetEnvSecret(bool),
     AddEnvVar,
     SaveProfile(String, String),
-
-    // UI
     DismissToast(usize),
     ToastError(String),
     ToastInfo(String),

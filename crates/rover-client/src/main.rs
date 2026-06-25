@@ -6,7 +6,9 @@ use api::client::RoverClient;
 use iced::widget::{Space, button, column, container, row, scrollable, text, text_input};
 use iced::{Element, Length, Size, Task};
 use message::Message;
-use rover_proto::v1::{AppDetailResponse, AppSummary, ServerInfo, ServerMetrics};
+use rover_proto::v1::{
+    AppDetailResponse, AppSummary, DeployEvent, LogEntry, ServerInfo, ServerMetrics,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -45,6 +47,9 @@ pub struct RoverApp {
     pub env_value_input: String,
     pub env_secret: bool,
     pub toasts: Vec<String>,
+    // Log streaming
+    pub log_entries: Vec<String>,
+    pub log_app_id: Option<String>,
 }
 
 impl RoverApp {
@@ -82,6 +87,8 @@ impl RoverApp {
                 env_value_input: String::new(),
                 env_secret: false,
                 toasts: vec![],
+                log_entries: vec![],
+                log_app_id: None,
             },
             Task::none(),
         )
@@ -100,6 +107,10 @@ impl RoverApp {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Navigate(s) => {
+                if s != Screen::AppDetail {
+                    self.log_app_id = None;
+                    self.log_entries.clear();
+                }
                 self.screen = s;
                 self.app_detail = None;
                 self.selected_app = None;
@@ -199,20 +210,48 @@ impl RoverApp {
             Message::AppsRefreshed(apps) => self.apps = apps,
 
             Message::SelectApp(id) => {
-                self.selected_app = Some(id.clone());
+                let app_id = id.clone();
+                self.selected_app = Some(app_id.clone());
                 self.screen = Screen::AppDetail;
+                self.log_app_id = Some(app_id.clone());
+                self.log_entries.clear();
                 if let Some(ref c) = self.client {
                     let c2 = c.clone();
-                    return Task::perform(
-                        async move { c2.lock().await.get_app(&id).await.map(Box::new) },
-                        |r| match r {
-                            Ok(d) => Message::AppDetailLoaded(d),
-                            Err(e) => Message::ToastError(e),
-                        },
-                    );
+                    let c3 = c.clone();
+                    let id_detail = app_id.clone();
+                    let id_log = app_id;
+                    return Task::batch(vec![
+                        Task::perform(
+                            async move { c2.lock().await.get_app(&id_detail).await.map(Box::new) },
+                            |r| match r {
+                                Ok(d) => Message::AppDetailLoaded(d),
+                                Err(e) => Message::ToastError(e),
+                            },
+                        ),
+                        Task::perform(
+                            async move {
+                                let mut rx =
+                                    c3.lock().await.stream_logs(&id_log, true, 200).await?;
+                                let mut lines = vec![];
+                                while let Some(Ok(entry)) = rx.recv().await {
+                                    lines.push(format!(
+                                        "{} {}",
+                                        if entry.is_stderr { "[stderr]" } else { "" },
+                                        entry.line
+                                    ));
+                                }
+                                Ok(lines)
+                            },
+                            |r: Result<Vec<String>, String>| match r {
+                                Ok(lines) => Message::LogLinesReceived(lines),
+                                Err(e) => Message::ToastError(e),
+                            },
+                        ),
+                    ]);
                 }
             }
             Message::AppDetailLoaded(d) => self.app_detail = Some(*d),
+            Message::LogLinesReceived(lines) => self.log_entries = lines,
 
             Message::StartApp(id) => {
                 if let Some(ref c) = self.client {
@@ -268,6 +307,7 @@ impl RoverApp {
                 }
             }
 
+            // --- Deploy ---
             Message::Deploy => {
                 self.screen = Screen::Deploy;
                 self.deploy_name.clear();
@@ -278,28 +318,6 @@ impl RoverApp {
                 self.deploy_source_path.clear();
                 self.deploying = false;
                 self.deploy_log.clear();
-            }
-            Message::SubmitDeploy => {
-                if !self.deploying {
-                    self.deploying = true;
-                    self.deploy_log.clear();
-                    self.deploy_log.push(
-                        "Deploy requires packaging source + gRPC streaming — not yet wired.".into(),
-                    );
-                    self.deploying = false;
-                }
-            }
-            Message::DeployComplete => {
-                self.deploying = false;
-                self.deploy_log.push("✅ Complete!".into());
-                return Task::batch(vec![
-                    Task::done(Message::Navigate(Screen::Dashboard)),
-                    Task::done(Message::RefreshApps),
-                ]);
-            }
-            Message::DeployError(e) => {
-                self.deploying = false;
-                self.deploy_log.push(format!("❌ {e}"));
             }
             Message::SetDeployName(v) => self.deploy_name = v,
             Message::SetDeployBuildCmd(v) => self.deploy_build_cmd = v,
@@ -321,6 +339,94 @@ impl RoverApp {
                     },
                 );
             }
+
+            Message::SubmitDeploy => {
+                if self.deploying || self.deploy_source_path.is_empty() {
+                    return Task::none();
+                }
+                self.deploying = true;
+                self.deploy_log.clear();
+                self.deploy_log.push("Packaging source...".into());
+
+                let manifest = format!(
+                    "[app]\nname = \"{}\"\nruntime = \"{}\"\ntype = \"{}\"\n\n[build]\ncommand = \"{}\"\n\n[run]\ncommand = \"{}\"\n",
+                    self.deploy_name,
+                    self.deploy_runtime,
+                    self.deploy_app_type,
+                    self.deploy_build_cmd,
+                    self.deploy_run_cmd,
+                );
+                let source_path = self.deploy_source_path.clone();
+
+                if let Some(ref c) = self.client {
+                    let c2 = c.clone();
+                    return Task::perform(
+                        async move {
+                            let archive = package_source(&source_path)
+                                .map_err(|e| format!("packaging failed: {e}"))?;
+                            let rt = runtime_to_proto(&manifest);
+                            let at = app_type_to_proto(&manifest);
+                            let mut rx = c2
+                                .lock()
+                                .await
+                                .deploy_stream("app".into(), rt, at, manifest, archive)
+                                .await?;
+                            let mut events = vec![];
+                            while let Some(event) = rx.recv().await {
+                                match event {
+                                    Ok(DeployEvent { event: Some(e) }) => events.push(e),
+                                    Err(e) => {
+                                        events.push(rover_proto::v1::deploy_event::Event::Error(
+                                            rover_proto::v1::DeployError { message: e },
+                                        ));
+                                        break;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            Ok(events)
+                        },
+                        |r: Result<Vec<rover_proto::v1::deploy_event::Event>, String>| match r {
+                            Ok(events) => Message::DeployStreamDone(events),
+                            Err(e) => Message::DeployError(e),
+                        },
+                    );
+                }
+            }
+            Message::DeployStreamDone(events) => {
+                for e in &events {
+                    match e {
+                        rover_proto::v1::deploy_event::Event::Log(l) => {
+                            self.deploy_log.push(format!(
+                                "{}{}",
+                                if l.is_stderr { "[err] " } else { "" },
+                                l.line
+                            ));
+                        }
+                        rover_proto::v1::deploy_event::Event::Complete(c) => {
+                            self.deploy_log
+                                .push(format!("✅ Deployed! App ID: {}", c.app_id));
+                        }
+                        rover_proto::v1::deploy_event::Event::Error(e) => {
+                            self.deploy_log.push(format!("❌ {}", e.message));
+                        }
+                        _ => {}
+                    }
+                }
+                self.deploying = false;
+                return Task::batch(vec![
+                    Task::done(Message::RefreshApps),
+                    Task::done(Message::Navigate(Screen::Dashboard)),
+                ]);
+            }
+            Message::DeployComplete => {
+                self.deploying = false;
+            }
+            Message::DeployError(e) => {
+                self.deploying = false;
+                self.deploy_log.push(format!("❌ {e}"));
+            }
+
             Message::SaveProfile(name, addr) => {
                 self.profiles
                     .upsert(rover_core::ConnectionProfile::new(name, addr));
@@ -329,7 +435,7 @@ impl RoverApp {
             Message::SetEnvKey(v) => self.env_key_input = v,
             Message::SetEnvValue(v) => self.env_value_input = v,
             Message::SetEnvSecret(v) => self.env_secret = v,
-            Message::AddEnvVar => {}
+            Message::AddEnvVar => { /* TODO */ }
 
             Message::Tick => {
                 if self.connected {
@@ -397,6 +503,8 @@ impl RoverApp {
         iced::Theme::Dark
     }
 
+    // ---- Sidebar ----
+
     fn sidebar(&self) -> Element<'_, Message> {
         let (ss, sc) = if self.connected {
             ("● Connected", theme::colors::SUCCESS)
@@ -438,6 +546,8 @@ impl RoverApp {
         }
         b.into()
     }
+
+    // ---- Connections ----
 
     fn connections_screen(&self) -> Element<'_, Message> {
         let pr: Vec<Element<_>> = self
@@ -509,6 +619,8 @@ impl RoverApp {
         .into()
     }
 
+    // ---- Dashboard ----
+
     fn dashboard_screen(&self) -> Element<'_, Message> {
         let hdr = row![
             text("Dashboard").size(24),
@@ -522,47 +634,19 @@ impl RoverApp {
             ))
             .size(13)
         } else {
-            text("Loading server info...")
-                .size(13)
-                .color(theme::colors::TEXT_MUTED)
+            text("Loading...").size(13).color(theme::colors::TEXT_MUTED)
         };
         let metrics: Element<_> = if let Some(ref m) = self.metrics {
+            let cpu_label = format!("CPU: {:.0}%", m.cpu_percent);
+            let ram_label = format!(
+                "RAM: {:.0}MB / {:.0}MB",
+                m.ram_used_bytes as f64 / 1_048_576.0,
+                m.ram_total_bytes as f64 / 1_048_576.0
+            );
             row![
-                container(
-                    text(format!("CPU: {:.0}%", m.cpu_percent))
-                        .size(13)
-                        .color(theme::colors::ACCENT)
-                )
-                .padding(8)
-                .style(|_: &iced::Theme| container::Style {
-                    background: Some(theme::colors::SURFACE.into()),
-                    border: iced::Border {
-                        color: theme::colors::ACCENT,
-                        width: 1.0,
-                        radius: 6.0.into()
-                    },
-                    ..container::Style::default()
-                }),
+                stat_badge(cpu_label, theme::colors::ACCENT),
                 Space::new(8, 0),
-                container(
-                    text(format!(
-                        "RAM: {:.0}MB / {:.0}MB",
-                        m.ram_used_bytes as f64 / 1_048_576.0,
-                        m.ram_total_bytes as f64 / 1_048_576.0
-                    ))
-                    .size(13)
-                    .color(theme::colors::SUCCESS)
-                )
-                .padding(8)
-                .style(|_: &iced::Theme| container::Style {
-                    background: Some(theme::colors::SURFACE.into()),
-                    border: iced::Border {
-                        color: theme::colors::SUCCESS,
-                        width: 1.0,
-                        radius: 6.0.into()
-                    },
-                    ..container::Style::default()
-                }),
+                stat_badge(ram_label, theme::colors::SUCCESS),
             ]
             .into()
         } else {
@@ -614,6 +698,8 @@ impl RoverApp {
         .into()
     }
 
+    // ---- App Detail ----
+
     fn app_detail_screen(&self) -> Element<'_, Message> {
         let Some(ref d) = self.app_detail else {
             return text("Loading...").size(16).into();
@@ -637,6 +723,11 @@ impl RoverApp {
                 .into()
             })
             .collect();
+        let log_lines: Vec<Element<_>> = self
+            .log_entries
+            .iter()
+            .map(|l| text(l).size(11).into())
+            .collect();
         scrollable(
             column![
                 row![
@@ -646,7 +737,7 @@ impl RoverApp {
                     Space::new(12, 0),
                     text(s).size(14).color(sc)
                 ],
-                Space::new(0, 12),
+                Space::new(0, 8),
                 text(format!(
                     "Runtime: {r}  |  Type: {t}  |  PID: {}  |  Restarts: {}",
                     d.pid.map_or("-".into(), |p| p.to_string()),
@@ -659,7 +750,7 @@ impl RoverApp {
                 text(format!("Run: {}", d.run_command))
                     .size(12)
                     .color(theme::colors::TEXT_MUTED),
-                Space::new(0, 12),
+                Space::new(0, 8),
                 row![
                     button(text("▶ Start")).on_press(Message::StartApp(d.app_id.clone())),
                     Space::new(8, 0),
@@ -671,7 +762,7 @@ impl RoverApp {
                         .style(button::danger)
                         .on_press(Message::DeleteApp(d.app_id.clone()))
                 ],
-                Space::new(0, 16),
+                Space::new(0, 12),
                 text("Environment Variables").size(16),
                 column(ev).spacing(2),
                 Space::new(0, 8),
@@ -688,13 +779,24 @@ impl RoverApp {
                     Space::new(8, 0),
                     button(text("+ Add")).on_press(Message::AddEnvVar)
                 ],
+                Space::new(0, 16),
+                text("Logs").size(16),
+                container(scrollable(column(log_lines).spacing(1)))
+                    .style(|_: &iced::Theme| container::Style {
+                        background: Some(iced::Color::from_rgb(0.05, 0.05, 0.08).into()),
+                        ..container::Style::default()
+                    })
+                    .padding(8)
+                    .height(200),
             ]
-            .spacing(8)
+            .spacing(6)
             .padding(24)
             .width(Length::Fill),
         )
         .into()
     }
+
+    // ---- Deploy ----
 
     fn deploy_screen(&self) -> Element<'_, Message> {
         let ls: Element<_> = if self.deploy_log.is_empty() {
@@ -705,7 +807,7 @@ impl RoverApp {
                     self.deploy_log
                         .iter()
                         .map(|l| -> Element<'_, Message> { text(l).size(12).into() })
-                        .collect::<Vec<Element<'_, Message>>>(),
+                        .collect::<Vec<_>>(),
                 )
                 .spacing(2),
             ))
@@ -717,17 +819,52 @@ impl RoverApp {
             .height(200)
             .into()
         };
-        scrollable(column![
-            text("Deploy an App").size(24), Space::new(0,12),
-            text("Client deploy is not yet fully wired to the server API. Use grpcurl on the server for now.").size(13).color(theme::colors::TEXT_MUTED), Space::new(0,16),
-            text_input("App name", &self.deploy_name).on_input(Message::SetDeployName).padding(8),
-            text_input("Build command", &self.deploy_build_cmd).on_input(Message::SetDeployBuildCmd).padding(8),
-            text_input("Run command", &self.deploy_run_cmd).on_input(Message::SetDeployRunCmd).padding(8),
-            text_input("Runtime (python/node/go/rust)", &self.deploy_runtime).on_input(Message::SetDeployRuntime).padding(8),
-            text_input("Type (service/job)", &self.deploy_app_type).on_input(Message::SetDeployAppType).padding(8),
-            row![text_input("Source directory", &self.deploy_source_path).on_input(Message::SetDeploySourcePath).padding(8).width(Length::Fill), Space::new(8,0), button(text("Browse...")).on_press(Message::PickSourceDirectory)],
-            Space::new(0,12), button(text("Deploy")).on_press_maybe(if self.deploying {None} else {Some(Message::SubmitDeploy)}), Space::new(0,8), ls,
-        ].spacing(8).padding(24).width(Length::Fill)).into()
+        scrollable(
+            column![
+                text("Deploy an App").size(24),
+                Space::new(0, 12),
+                text_input("App name", &self.deploy_name)
+                    .on_input(Message::SetDeployName)
+                    .padding(8),
+                text_input("Build command", &self.deploy_build_cmd)
+                    .on_input(Message::SetDeployBuildCmd)
+                    .padding(8),
+                text_input("Run command", &self.deploy_run_cmd)
+                    .on_input(Message::SetDeployRunCmd)
+                    .padding(8),
+                text_input("Runtime (python/node/go/rust)", &self.deploy_runtime)
+                    .on_input(Message::SetDeployRuntime)
+                    .padding(8),
+                text_input("Type (service/job)", &self.deploy_app_type)
+                    .on_input(Message::SetDeployAppType)
+                    .padding(8),
+                row![
+                    text_input("Source directory", &self.deploy_source_path)
+                        .on_input(Message::SetDeploySourcePath)
+                        .padding(8)
+                        .width(Length::Fill),
+                    Space::new(8, 0),
+                    button(text("Browse...")).on_press(Message::PickSourceDirectory)
+                ],
+                Space::new(0, 12),
+                button(text(if self.deploying {
+                    "Deploying..."
+                } else {
+                    "Deploy"
+                }))
+                .on_press_maybe(if self.deploying {
+                    None
+                } else {
+                    Some(Message::SubmitDeploy)
+                }),
+                Space::new(0, 8),
+                ls,
+            ]
+            .spacing(8)
+            .padding(24)
+            .width(Length::Fill),
+        )
+        .into()
     }
 
     fn terminal_screen(&self) -> Element<'_, Message> {
@@ -741,7 +878,7 @@ impl RoverApp {
     }
 }
 
-// Helpers
+// ---- Helpers ----
 
 fn sd(s: i32) -> (&'static str, iced::Color) {
     match s {
@@ -771,6 +908,21 @@ fn ad(a: i32) -> (&'static str, iced::Color) {
     }
 }
 
+fn stat_badge(label: String, color: iced::Color) -> Element<'static, Message> {
+    container(text(label).size(13).color(color))
+        .padding(8)
+        .style(move |_: &iced::Theme| container::Style {
+            background: Some(theme::colors::SURFACE.into()),
+            border: iced::Border {
+                color,
+                width: 1.0,
+                radius: 6.0.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
+}
+
 async fn connect_and_pair(
     addr: String,
     token: String,
@@ -786,6 +938,49 @@ async fn connect_with_key(addr: String, key: String) -> Result<Arc<Mutex<RoverCl
     client.set_api_key(&key);
     client.get_info().await?;
     Ok(Arc::new(Mutex::new(client)))
+}
+
+fn package_source(dir: &str) -> anyhow::Result<Vec<u8>> {
+    use std::io::Write;
+    let mut archive = tar::Builder::new(Vec::new());
+    for entry in walkdir::WalkDir::new(dir).into_iter().filter_entry(|e| {
+        let name = e.file_name().to_string_lossy();
+        !name.starts_with('.')
+            && name != "target"
+            && name != "node_modules"
+            && name != "__pycache__"
+            && name != ".git"
+    }) {
+        let entry = entry?;
+        let path = entry.path();
+        let relative = path.strip_prefix(dir)?;
+        if relative.as_os_str().is_empty() || !path.is_file() {
+            continue;
+        }
+        archive.append_path_with_name(path, relative)?;
+    }
+    let data = archive.into_inner()?;
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(&data)?;
+    Ok(encoder.finish()?)
+}
+
+fn runtime_to_proto(manifest: &str) -> i32 {
+    if manifest.contains("python") {
+        1
+    } else if manifest.contains("node") {
+        2
+    } else if manifest.contains("go") {
+        3
+    } else if manifest.contains("rust") {
+        4
+    } else {
+        1
+    }
+}
+
+fn app_type_to_proto(manifest: &str) -> i32 {
+    if manifest.contains("job") { 2 } else { 1 }
 }
 
 fn main() -> iced::Result {
