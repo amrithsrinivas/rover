@@ -55,6 +55,22 @@ pkg install python3 openssl
 
 ## Quick Start
 
+### One-Command Install (Android/Termux)
+
+From your Android phone running Termux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/main/install.sh | bash
+```
+
+This installs dependencies, clones the repo, builds the server, and launches it — all in one command.
+
+To use a custom port:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/main/install.sh | bash -s -- 8080
+```
+
 ### 1. Start the Server
 
 On your Android phone (Termux):
@@ -65,10 +81,9 @@ On your Android phone (Termux):
 
 The server will print:
 ```
-[Rover] Server listening on 0.0.0.0:9050
-[Rover] Local addresses:
-[Rover]   - 192.168.1.42:9050
 [Rover] Pairing token: rover-pair-abc123def456
+[Rover]   -> Available at: http://192.168.1.42:9050
+[Rover] gRPC server listening on 0.0.0.0:9050
 ```
 
 ### 2. Connect the Desktop Client
