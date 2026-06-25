@@ -1,0 +1,15 @@
+[package]
+name = "rover-transport-lan"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rover-transport.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+tonic.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tracing.workspace = true

@@ -1,0 +1,22 @@
+syntax = "proto3";
+package rover.v1;
+
+import "rover/v1/common.proto";
+
+// --- Pairing ---
+
+message PairRequest {
+  string pairing_token = 1;
+}
+
+message PairResponse {
+  string api_key = 1;
+  string server_name = 2;
+  string server_version = 3;
+}
+
+// --- Service ---
+
+service AuthService {
+  rpc Pair(PairRequest) returns (PairResponse);
+}

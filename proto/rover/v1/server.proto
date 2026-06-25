@@ -1,0 +1,47 @@
+syntax = "proto3";
+package rover.v1;
+
+import "rover/v1/common.proto";
+
+// --- Server info ---
+
+message ServerInfo {
+  string name = 1;
+  string version = 2;
+  string os = 3;
+  string hostname = 4;
+  uint32 uptime_seconds = 5;
+}
+
+message GetInfoRequest {}
+message GetMetricsRequest {}
+
+// --- App summary ---
+
+message AppSummary {
+  string app_id = 1;
+  string name = 2;
+  Runtime runtime = 3;
+  AppType app_type = 4;
+  AppStatus status = 5;
+  Timestamp created_at = 6;
+  Timestamp updated_at = 7;
+}
+
+message AppListRequest {
+  PageRequest page = 1;
+}
+
+message AppListResponse {
+  repeated AppSummary apps = 1;
+  PageResponse page = 2;
+}
+
+// --- Service ---
+
+service ServerService {
+  rpc GetInfo(GetInfoRequest) returns (ServerInfo);
+  rpc GetMetrics(GetMetricsRequest) returns (ServerMetrics);
+  rpc StreamMetrics(GetMetricsRequest) returns (stream ServerMetrics);
+  rpc ListApps(AppListRequest) returns (AppListResponse);
+}

@@ -1,0 +1,55 @@
+syntax = "proto3";
+package rover.v1;
+
+// --- Enums ---
+
+enum Runtime {
+  RUNTIME_UNSPECIFIED = 0;
+  RUNTIME_PYTHON = 1;
+  RUNTIME_NODE = 2;
+  RUNTIME_GO = 3;
+  RUNTIME_RUST = 4;
+}
+
+enum AppType {
+  APP_TYPE_UNSPECIFIED = 0;
+  APP_TYPE_SERVICE = 1;
+  APP_TYPE_JOB = 2;
+}
+
+enum AppStatus {
+  APP_STATUS_UNSPECIFIED = 0;
+  APP_STATUS_DEPLOYING = 1;
+  APP_STATUS_STARTING = 2;
+  APP_STATUS_RUNNING = 3;
+  APP_STATUS_STOPPED = 4;
+  APP_STATUS_CRASHED = 5;
+  APP_STATUS_FAILED = 6;
+}
+
+// --- Common messages ---
+
+message Empty {}
+
+message PageRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message PageResponse {
+  int32 total = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message Timestamp {
+  int64 millis = 1;
+}
+
+message ServerMetrics {
+  double cpu_percent = 1;
+  uint64 ram_used_bytes = 2;
+  uint64 ram_total_bytes = 3;
+  uint64 disk_used_bytes = 4;
+  uint64 disk_total_bytes = 5;
+}
