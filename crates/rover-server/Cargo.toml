@@ -19,6 +19,7 @@ rover-transport-relay.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 tonic.workspace = true
+tonic-reflection = "0.12"
 prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true

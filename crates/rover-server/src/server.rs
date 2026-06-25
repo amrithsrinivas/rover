@@ -61,15 +61,21 @@ pub async fn start(
 
     tracing::info!("gRPC server listening on {addr}");
 
-    // Build tonic server with all services
+    // Build tonic server with all services + reflection
     let auth_svc = AuthServiceServer::new(rover.clone());
     let server_svc = ServerServiceServer::new(rover.clone());
     let app_svc = AppServiceServer::new(rover.clone());
+
+    let reflection = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(rover_proto::v1::FILE_DESCRIPTOR_SET)
+        .build_v1()
+        .map_err(|e| anyhow::anyhow!("failed to build reflection: {e}"))?;
 
     tonic::transport::Server::builder()
         .add_service(auth_svc)
         .add_service(server_svc)
         .add_service(app_svc)
+        .add_service(reflection)
         .serve(addr)
         .await?;
 
