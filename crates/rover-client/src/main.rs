@@ -381,9 +381,10 @@ impl RoverApp {
                 self.deploy_log.clear();
                 self.deploy_log.push("Packaging source...".into());
 
+                let app_name = self.deploy_name.clone();
                 let manifest = format!(
                     "[app]\nname = \"{}\"\nruntime = \"{}\"\ntype = \"{}\"\n\n[build]\ncommand = \"{}\"\n\n[run]\ncommand = \"{}\"\n",
-                    self.deploy_name,
+                    app_name,
                     self.deploy_runtime,
                     self.deploy_app_type,
                     self.deploy_build_cmd,
@@ -397,24 +398,36 @@ impl RoverApp {
                         async move {
                             let archive = package_source(&source_path)
                                 .map_err(|e| format!("packaging failed: {e}"))?;
+                            tracing::info!(
+                                "Deploy: packaged {} bytes from {}",
+                                archive.len(),
+                                source_path
+                            );
                             let rt = runtime_to_proto(&manifest);
                             let at = app_type_to_proto(&manifest);
                             let mut rx = c2
                                 .lock()
                                 .await
-                                .deploy_stream("app".into(), rt, at, manifest, archive)
+                                .deploy_stream(app_name, rt, at, manifest, archive)
                                 .await?;
                             let mut events = vec![];
                             while let Some(event) = rx.recv().await {
                                 match event {
                                     Ok(DeployEvent { event: Some(e) }) => events.push(e),
+                                    Ok(_) => {
+                                        events.push(rover_proto::v1::deploy_event::Event::Log(
+                                            rover_proto::v1::DeployLogLine {
+                                                line: "(empty event)".into(),
+                                                is_stderr: true,
+                                            },
+                                        ))
+                                    }
                                     Err(e) => {
                                         events.push(rover_proto::v1::deploy_event::Event::Error(
                                             rover_proto::v1::DeployError { message: e },
                                         ));
                                         break;
                                     }
-                                    _ => {}
                                 }
                             }
                             Ok(events)
@@ -430,11 +443,8 @@ impl RoverApp {
                 for e in &events {
                     match e {
                         rover_proto::v1::deploy_event::Event::Log(l) => {
-                            self.deploy_log.push(format!(
-                                "{}{}",
-                                if l.is_stderr { "[err] " } else { "" },
-                                l.line
-                            ));
+                            let prefix = if l.is_stderr { "[stderr] " } else { "" };
+                            self.deploy_log.push(format!("{prefix}{}", l.line));
                         }
                         rover_proto::v1::deploy_event::Event::Complete(c) => {
                             self.deploy_log
@@ -447,17 +457,16 @@ impl RoverApp {
                     }
                 }
                 self.deploying = false;
-                return Task::batch(vec![
-                    Task::done(Message::RefreshApps),
-                    Task::done(Message::Navigate(Screen::Dashboard)),
-                ]);
+                // Don't auto-navigate — let user see the build output first
+                return Task::done(Message::RefreshApps);
             }
             Message::DeployComplete => {
                 self.deploying = false;
             }
             Message::DeployError(e) => {
                 self.deploying = false;
-                self.deploy_log.push(format!("❌ {e}"));
+                self.deploy_log.push(format!("❌ Deploy failed: {e}"));
+                self.toasts.push(format!("Deploy error: {e}"));
             }
 
             Message::SaveProfile(name, addr) => {

@@ -120,6 +120,8 @@ async fn run_deploy(
     pm: &ProcessManager,
     registry: &RuntimeRegistry,
 ) -> anyhow::Result<()> {
+    tracing::info!(app_id=%app_id, app_name=%app_name, runtime=%runtime_str, "deploy starting");
+    tracing::info!(app_id=%app_id, "source archive size: {} bytes", source_tar_gz.len());
     use rover_core::Runtime;
     let runtime: Runtime = runtime_str
         .parse()
@@ -161,13 +163,11 @@ async fn run_deploy(
     // Extract source
     let _ = tx.send(DeployEvent::log("Extracting source...")).await;
     extract_tar_gz(&source_tar_gz, &source_dir)?;
+    tracing::info!(app_id=%app_id, "source extracted to {}", source_dir.display());
 
-    // Build — capture stdout/stderr live
+    // Build
     let _ = tx
-        .send(DeployEvent::log(format!(
-            "Building with {}...",
-            runtime_str
-        )))
+        .send(DeployEvent::log(format!("Building with {runtime_str}...")))
         .await;
     let _ = tx.send(DeployEvent::log(format!("> {build_cmd}"))).await;
 
@@ -178,6 +178,7 @@ async fn run_deploy(
         run_build_and_stream(&build_dir, &build_cmd_owned, &build_tx)
     })
     .await??;
+    tracing::info!(app_id=%app_id, ?build_result, "build finished");
 
     if !build_result.success() {
         let _ = tx
@@ -205,6 +206,7 @@ async fn run_deploy(
     pm.spawn(app_id, &program, &args, env_vars, &source_dir, app_type)
         .await?;
     store.update_app_status(app_id, "running")?;
+    tracing::info!(app_id=%app_id, "app started successfully");
 
     let _ = tx.send(DeployEvent::complete(app_id)).await;
     Ok(())
