@@ -1,6 +1,6 @@
 #!/bin/bash
 # Rover — one-command install and launch for Android/Termux
-# Usage: curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/refs/heads/main/scripts/install.sh | bash
 
 set -euo pipefail
 

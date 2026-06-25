@@ -40,7 +40,7 @@ pub async fn start(
     auth: AuthManager,
     deployer: Deployer,
     process_manager: ProcessManager,
-    data_dir: &std::path::Path,
+    _data_dir: &std::path::Path,
 ) -> anyhow::Result<()> {
     let rover = RoverServer {
         store,
@@ -315,7 +315,7 @@ impl AppService for RoverServer {
         request: Request<v1::AppRequest>,
     ) -> Result<Response<v1::AppDetailResponse>, Status> {
         let app_id = request.into_inner().app_id;
-        let app = self
+        let _app = self
             .store
             .get_app(&app_id)
             .map_err(|e| Status::internal(e.to_string()))?

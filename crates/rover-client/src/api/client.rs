@@ -1,18 +1,232 @@
-/// gRPC client for communicating with the Rover server.
+use rover_proto::v1::{
+    AppDetailResponse, AppListResponse, AppRequest, AppSummary, DeleteEnvRequest, DeployRequest,
+    DeployResponse, LogEntry, LogStreamRequest, PairResponse, ServerInfo, ServerMetrics,
+    SetEnvRequest, SetSecretRequest, app_service_client::AppServiceClient,
+    auth_service_client::AuthServiceClient, server_service_client::ServerServiceClient,
+};
+use std::collections::HashMap;
+use tonic::Request;
+use tonic::metadata::MetadataValue;
+use tonic::transport::Channel;
+
+/// Wraps the gRPC client connections for all Rover services.
 pub struct RoverClient {
-    // TODO: tonic channel + service clients
+    pub channel: Channel,
+    pub auth: AuthServiceClient<Channel>,
+    pub server: ServerServiceClient<Channel>,
+    pub app: AppServiceClient<Channel>,
+    pub api_key: Option<String>,
+}
+
+impl std::fmt::Debug for RoverClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RoverClient")
+            .field("has_api_key", &self.api_key.is_some())
+            .finish()
+    }
 }
 
 impl RoverClient {
-    /// Create a new client and connect to the server address.
+    /// Connect to a server at the given address.
     pub async fn connect(address: &str) -> Result<Self, String> {
-        let _ = address;
-        Err("not implemented".to_string())
+        let uri = format!("http://{address}");
+        let channel = Channel::from_shared(uri)
+            .map_err(|e| format!("invalid address: {e}"))?
+            .connect()
+            .await
+            .map_err(|e| format!("connection failed: {e}"))?;
+
+        Ok(Self {
+            auth: AuthServiceClient::new(channel.clone()),
+            server: ServerServiceClient::new(channel.clone()),
+            app: AppServiceClient::new(channel.clone()),
+            channel,
+            api_key: None,
+        })
     }
 
     /// Exchange a pairing token for a persistent API key.
-    pub async fn pair(&mut self, token: &str) -> Result<String, String> {
-        let _ = token;
-        Err("not implemented".to_string())
+    pub async fn pair(&mut self, token: &str) -> Result<PairResponse, String> {
+        let req = Request::new(rover_proto::v1::PairRequest {
+            pairing_token: token.to_string(),
+        });
+        let resp = self
+            .auth
+            .pair(req)
+            .await
+            .map_err(|e| format!("pair failed: {e}"))?
+            .into_inner();
+        self.api_key = Some(resp.api_key.clone());
+        Ok(resp)
+    }
+
+    /// Set the API key without going through the pairing flow.
+    pub fn set_api_key(&mut self, key: &str) {
+        self.api_key = Some(key.to_string());
+    }
+
+    /// Add the authorization header to a request.
+    fn auth_req<T>(&self, req: &mut Request<T>) -> Result<(), String> {
+        let key = self.api_key.as_ref().ok_or("not authenticated")?;
+        let value = MetadataValue::try_from(format!("Bearer {key}"))
+            .map_err(|e| format!("invalid api key: {e}"))?;
+        req.metadata_mut().insert("authorization", value);
+        Ok(())
+    }
+
+    // --- Server Service ---
+
+    pub async fn get_info(&mut self) -> Result<ServerInfo, String> {
+        let mut req = Request::new(rover_proto::v1::GetInfoRequest {});
+        self.auth_req(&mut req)?;
+        Ok(self
+            .server
+            .get_info(req)
+            .await
+            .map_err(|e| format!("get_info: {e}"))?
+            .into_inner())
+    }
+
+    pub async fn get_metrics(&mut self) -> Result<ServerMetrics, String> {
+        let mut req = Request::new(rover_proto::v1::GetMetricsRequest {});
+        self.auth_req(&mut req)?;
+        Ok(self
+            .server
+            .get_metrics(req)
+            .await
+            .map_err(|e| format!("get_metrics: {e}"))?
+            .into_inner())
+    }
+
+    pub async fn list_apps(&mut self) -> Result<AppListResponse, String> {
+        let mut req = Request::new(rover_proto::v1::AppListRequest {
+            page: Some(rover_proto::v1::PageRequest {
+                limit: 50,
+                offset: 0,
+            }),
+        });
+        self.auth_req(&mut req)?;
+        Ok(self
+            .server
+            .list_apps(req)
+            .await
+            .map_err(|e| format!("list_apps: {e}"))?
+            .into_inner())
+    }
+
+    // --- App Service ---
+
+    pub async fn get_app(&mut self, app_id: &str) -> Result<AppDetailResponse, String> {
+        let mut req = Request::new(AppRequest {
+            app_id: app_id.to_string(),
+        });
+        self.auth_req(&mut req)?;
+        Ok(self
+            .app
+            .get_app(req)
+            .await
+            .map_err(|e| format!("get_app: {e}"))?
+            .into_inner())
+    }
+
+    pub async fn start_app(&mut self, app_id: &str) -> Result<AppDetailResponse, String> {
+        let mut req = Request::new(AppRequest {
+            app_id: app_id.to_string(),
+        });
+        self.auth_req(&mut req)?;
+        Ok(self
+            .app
+            .start_app(req)
+            .await
+            .map_err(|e| format!("start_app: {e}"))?
+            .into_inner())
+    }
+
+    pub async fn stop_app(&mut self, app_id: &str) -> Result<AppDetailResponse, String> {
+        let mut req = Request::new(AppRequest {
+            app_id: app_id.to_string(),
+        });
+        self.auth_req(&mut req)?;
+        Ok(self
+            .app
+            .stop_app(req)
+            .await
+            .map_err(|e| format!("stop_app: {e}"))?
+            .into_inner())
+    }
+
+    pub async fn restart_app(&mut self, app_id: &str) -> Result<AppDetailResponse, String> {
+        let mut req = Request::new(AppRequest {
+            app_id: app_id.to_string(),
+        });
+        self.auth_req(&mut req)?;
+        Ok(self
+            .app
+            .restart_app(req)
+            .await
+            .map_err(|e| format!("restart_app: {e}"))?
+            .into_inner())
+    }
+
+    pub async fn delete_app(&mut self, app_id: &str) -> Result<(), String> {
+        let mut req = Request::new(AppRequest {
+            app_id: app_id.to_string(),
+        });
+        self.auth_req(&mut req)?;
+        self.app
+            .delete_app(req)
+            .await
+            .map_err(|e| format!("delete_app: {e}"))?;
+        Ok(())
+    }
+
+    pub async fn set_env(
+        &mut self,
+        app_id: &str,
+        vars: HashMap<String, String>,
+    ) -> Result<AppDetailResponse, String> {
+        let mut req = Request::new(SetEnvRequest {
+            app_id: app_id.to_string(),
+            env_vars: vars,
+        });
+        self.auth_req(&mut req)?;
+        Ok(self
+            .app
+            .set_env(req)
+            .await
+            .map_err(|e| format!("set_env: {e}"))?
+            .into_inner())
+    }
+
+    pub async fn delete_env(
+        &mut self,
+        app_id: &str,
+        keys: Vec<String>,
+    ) -> Result<AppDetailResponse, String> {
+        let mut req = Request::new(DeleteEnvRequest {
+            app_id: app_id.to_string(),
+            keys,
+        });
+        self.auth_req(&mut req)?;
+        Ok(self
+            .app
+            .delete_env(req)
+            .await
+            .map_err(|e| format!("delete_env: {e}"))?
+            .into_inner())
+    }
+
+    pub async fn set_secret(&mut self, app_id: &str, key: &str, value: &str) -> Result<(), String> {
+        let mut req = Request::new(SetSecretRequest {
+            app_id: app_id.to_string(),
+            key: key.to_string(),
+            value: value.to_string(),
+        });
+        self.auth_req(&mut req)?;
+        self.app
+            .set_secret(req)
+            .await
+            .map_err(|e| format!("set_secret: {e}"))?;
+        Ok(())
     }
 }

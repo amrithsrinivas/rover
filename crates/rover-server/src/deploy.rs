@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use crate::process::ProcessManager;
 use crate::runtime::RuntimeRegistry;
 use crate::state::StateStore;
-use rover_core::{AppManifest, Runtime};
+use rover_core::AppManifest;
 
 /// Orchestrates the deployment lifecycle: validate, extract, build, start.
 pub struct Deployer {
@@ -41,7 +41,7 @@ impl Deployer {
 
         manifest.validate()?;
         let runtime = manifest.runtime()?;
-        let app_type = manifest.app_type()?;
+        let _app_type = manifest.app_type()?;
         let app_id = uuid::Uuid::new_v4().to_string();
 
         let handler = self

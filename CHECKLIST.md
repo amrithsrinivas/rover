@@ -265,112 +265,112 @@
 ### 1B.1 — Iced Scaffold
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1B.1.1 | `main.rs` with `iced::Application` impl | [ ] | |
-| 1B.1.2 | Dark theme (custom `Theme` struct, `application::StyleSheet`) | [ ] | |
-| 1B.1.3 | Window opens with dark background, correct title ("Rover") | [ ] | |
-| 1B.1.4 | Window dimensions: 1024x768 default | [ ] | |
-| 1B.1.5 | Window icon (placeholder or rover icon) | [ ] | |
+| 1B.1.1 | `main.rs` with `iced::Application` impl | [x] | |
+| 1B.1.2 | Dark theme (custom `Theme` struct, `application::StyleSheet`) | [x] | |
+| 1B.1.3 | Window opens with dark background, correct title ("Rover") | [x] | |
+| 1B.1.4 | Window dimensions: 1024x768 default | [x] | |
+| 1B.1.5 | Window icon (placeholder or rover icon) | [x] | |
 
 ### 1B.2 — Navigation
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1B.2.1 | `Screen` enum in `Message` | [ ] | |
-| 1B.2.2 | Sidebar with navigation buttons (Connections, Dashboard, Deploy) | [ ] | |
-| 1B.2.3 | Sidebar highlights active screen | [ ] | |
-| 1B.2.4 | Active screen renders correct content | [ ] | |
-| 1B.2.5 | Dashboard shows "Not connected" state when disconnected | [ ] | |
-| 1B.2.6 | AppDetail screen shows app_id breadcrumb + back button | [ ] | |
+| 1B.2.1 | `Screen` enum in `Message` | [x] | |
+| 1B.2.2 | Sidebar with navigation buttons (Connections, Dashboard, Deploy) | [x] | |
+| 1B.2.3 | Sidebar highlights active screen | [x] | |
+| 1B.2.4 | Active screen renders correct content | [x] | |
+| 1B.2.5 | Dashboard shows "Not connected" state when disconnected | [x] | |
+| 1B.2.6 | AppDetail screen shows app_id breadcrumb + back button | [x] | |
 
 ### 1B.3 — Connection Profiles
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1B.3.1 | Load profiles from `~/.config/rover/profiles.json` on startup | [ ] | |
-| 1B.3.2 | Save profiles on change | [ ] | |
-| 1B.3.3 | Connections screen: list of saved profiles | [ ] | |
-| 1B.3.4 | Add profile: name, address, pairing token fields | [ ] | |
-| 1B.3.5 | Delete profile with confirmation | [ ] | |
-| 1B.3.6 | Connect button triggers pairing flow | [ ] | |
-| 1B.3.7 | After pairing, api_key stored in profile, pairing token cleared | [ ] | |
-| 1B.3.8 | Profile shows last_used timestamp | [ ] | |
-| 1B.3.9 | Active profile indicated in sidebar | [ ] | |
-| 1B.3.10 | Test: add profile, close app, reopen, profile persists | [ ] | |
+| 1B.3.1 | Load profiles from `~/.config/rover/profiles.json` on startup | [x] | |
+| 1B.3.2 | Save profiles on change | [x] | |
+| 1B.3.3 | Connections screen: list of saved profiles | [x] | |
+| 1B.3.4 | Add profile: name, address, pairing token fields | [x] | |
+| 1B.3.5 | Delete profile with confirmation | [x] | |
+| 1B.3.6 | Connect button triggers pairing flow | [x] | |
+| 1B.3.7 | After pairing, api_key stored in profile, pairing token cleared | [x] | |
+| 1B.3.8 | Profile shows last_used timestamp | [x] | |
+| 1B.3.9 | Active profile indicated in sidebar | [x] | |
+| 1B.3.10 | Test: add profile, close app, reopen, profile persists | [x] | |
 
 ### 1B.4 — Connection Screen
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1B.4.1 | Address text input with placeholder "192.168.1.42:9050" | [ ] | |
-| 1B.4.2 | Pairing token text input | [ ] | |
-| 1B.4.3 | Connect button → transitions to Connecting state | [ ] | |
-| 1B.4.4 | Connection error → shows error message + retry button | [ ] | |
-| 1B.4.5 | Successful connection → transitions to Dashboard | [ ] | |
-| 1B.4.6 | Connect with existing API key (skip pairing if profile has one) | [ ] | |
+| 1B.4.1 | Address text input with placeholder "192.168.1.42:9050" | [x] | |
+| 1B.4.2 | Pairing token text input | [x] | |
+| 1B.4.3 | Connect button → transitions to Connecting state | [x] | |
+| 1B.4.4 | Connection error → shows error message + retry button | [x] | |
+| 1B.4.5 | Successful connection → transitions to Dashboard | [x] | |
+| 1B.4.6 | Connect with existing API key (skip pairing if profile has one) | [x] | |
 
 ### 1B.5 — API Client
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1B.5.1 | `RoverClient` struct with underlying tonic clients | [ ] | |
-| 1B.5.2 | `connect(address)` — creates channel, auth_client, server_client, app_client | [ ] | |
-| 1B.5.3 | `pair(token)` → PairResponse (stores api_key) | [ ] | |
-| 1B.5.4 | API key sent as `authorization: Bearer <key>` metadata on all calls | [ ] | |
-| 1B.5.5 | `get_info()` → ServerInfo | [ ] | |
-| 1B.5.6 | `get_metrics()` → ServerMetrics | [ ] | |
-| 1B.5.7 | `stream_metrics()` → Streaming<ServerMetrics> | [ ] | |
-| 1B.5.8 | `list_apps()` → Vec<AppSummary> | [ ] | |
-| 1B.5.9 | `deploy(req)` → Streaming<DeployEvent> | [ ] | |
-| 1B.5.10 | `get_app(app_id)` → AppDetailResponse | [ ] | |
-| 1B.5.11 | `start_app(app_id)` → AppDetailResponse | [ ] | |
-| 1B.5.12 | `stop_app(app_id)` → AppDetailResponse | [ ] | |
-| 1B.5.13 | `restart_app(app_id)` → AppDetailResponse | [ ] | |
-| 1B.5.14 | `delete_app(app_id)` → () | [ ] | |
-| 1B.5.15 | `stream_logs(app_id)` → Streaming<LogEntry> | [ ] | |
-| 1B.5.16 | `set_env(app_id, vars)` → AppDetailResponse | [ ] | |
-| 1B.5.17 | `delete_env(app_id, keys)` → AppDetailResponse | [ ] | |
-| 1B.5.18 | `set_secret(app_id, key, value)` → () | [ ] | |
-| 1B.5.19 | `shell(app_id)` → (Streaming<ShellOutput>, Sink<ShellInput>) | [ ] | |
-| 1B.5.20 | `disconnect()` — close channel | [ ] | |
+| 1B.5.1 | `RoverClient` struct with underlying tonic clients | [x] | |
+| 1B.5.2 | `connect(address)` — creates channel, auth_client, server_client, app_client | [x] | |
+| 1B.5.3 | `pair(token)` → PairResponse (stores api_key) | [x] | |
+| 1B.5.4 | API key sent as `authorization: Bearer <key>` metadata on all calls | [x] | |
+| 1B.5.5 | `get_info()` → ServerInfo | [x] | |
+| 1B.5.6 | `get_metrics()` → ServerMetrics | [x] | |
+| 1B.5.7 | `stream_metrics()` → Streaming<ServerMetrics> | [x] | |
+| 1B.5.8 | `list_apps()` → Vec<AppSummary> | [x] | |
+| 1B.5.9 | `deploy(req)` → Streaming<DeployEvent> | [x] | |
+| 1B.5.10 | `get_app(app_id)` → AppDetailResponse | [x] | |
+| 1B.5.11 | `start_app(app_id)` → AppDetailResponse | [x] | |
+| 1B.5.12 | `stop_app(app_id)` → AppDetailResponse | [x] | |
+| 1B.5.13 | `restart_app(app_id)` → AppDetailResponse | [x] | |
+| 1B.5.14 | `delete_app(app_id)` → () | [x] | |
+| 1B.5.15 | `stream_logs(app_id)` → Streaming<LogEntry> | [x] | |
+| 1B.5.16 | `set_env(app_id, vars)` → AppDetailResponse | [x] | |
+| 1B.5.17 | `delete_env(app_id, keys)` → AppDetailResponse | [x] | |
+| 1B.5.18 | `set_secret(app_id, key, value)` → () | [x] | |
+| 1B.5.19 | `shell(app_id)` → (Streaming<ShellOutput>, Sink<ShellInput>) | [x] | |
+| 1B.5.20 | `disconnect()` — close channel | [x] | |
 
 ### 1B.6 — Dashboard Screen
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1B.6.1 | Server info card: name, version, OS, uptime | [ ] | |
-| 1B.6.2 | Metrics bar: CPU %, RAM used/total, disk used/total | [ ] | |
-| 1B.6.3 | App list: table of apps with name, runtime badge, status badge, age | [ ] | |
-| 1B.6.4 | Status badges color-coded (green=running, red=crashed, yellow=deploying, gray=stopped) | [ ] | |
-| 1B.6.5 | Runtime badges with distinct icons/colors per runtime | [ ] | |
-| 1B.6.6 | Click app row → navigate to AppDetail | [ ] | |
-| 1B.6.7 | Refresh button → re-fetch server info + app list + metrics | [ ] | |
-| 1B.6.8 | Auto-refresh every 10s (configurable) | [ ] | |
-| 1B.6.9 | Deploy button → navigate to Deploy screen | [ ] | |
+| 1B.6.1 | Server info card: name, version, OS, uptime | [x] | |
+| 1B.6.2 | Metrics bar: CPU %, RAM used/total, disk used/total | [x] | |
+| 1B.6.3 | App list: table of apps with name, runtime badge, status badge, age | [x] | |
+| 1B.6.4 | Status badges color-coded (green=running, red=crashed, yellow=deploying, gray=stopped) | [x] | |
+| 1B.6.5 | Runtime badges with distinct icons/colors per runtime | [x] | |
+| 1B.6.6 | Click app row → navigate to AppDetail | [x] | |
+| 1B.6.7 | Refresh button → re-fetch server info + app list + metrics | [x] | |
+| 1B.6.8 | Auto-refresh every 10s (configurable) | [x] | |
+| 1B.6.9 | Deploy button → navigate to Deploy screen | [x] | |
 
 ### 1B.7 — App Detail Screen
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1B.7.1 | App name + status badge header | [ ] | |
-| 1B.7.2 | Info section: runtime, type, build command, run command, created, pid | [ ] | |
-| 1B.7.3 | Action buttons: Start, Stop, Restart, Delete | [ ] | |
-| 1B.7.4 | Buttons disabled/hidden based on current status | [ ] | |
-| 1B.7.5 | Delete button → confirmation dialog | [ ] | |
-| 1B.7.6 | Env vars table: key, value (masked if secret), delete button | [ ] | |
-| 1B.7.7 | Add env var form: key input, value input, is_secret checkbox | [ ] | |
-| 1B.7.8 | Refresh app detail after actions | [ ] | |
-| 1B.7.9 | Back to Dashboard button | [ ] | |
+| 1B.7.1 | App name + status badge header | [x] | |
+| 1B.7.2 | Info section: runtime, type, build command, run command, created, pid | [x] | |
+| 1B.7.3 | Action buttons: Start, Stop, Restart, Delete | [x] | |
+| 1B.7.4 | Buttons disabled/hidden based on current status | [x] | |
+| 1B.7.5 | Delete button → confirmation dialog | [x] | |
+| 1B.7.6 | Env vars table: key, value (masked if secret), delete button | [x] | |
+| 1B.7.7 | Add env var form: key input, value input, is_secret checkbox | [x] | |
+| 1B.7.8 | Refresh app detail after actions | [x] | |
+| 1B.7.9 | Back to Dashboard button | [x] | |
 
 ### 1B.8 — Deploy Screen
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1B.8.1 | App name text input | [ ] | |
-| 1B.8.2 | Runtime selector dropdown (Python only for now, others disabled) | [ ] | |
-| 1B.8.3 | App type selector dropdown (Service / Job) | [ ] | |
-| 1B.8.4 | Build command text input (prefilled based on runtime) | [ ] | |
-| 1B.8.5 | Run command text input (prefilled based on runtime) | [ ] | |
-| 1B.8.6 | Source directory picker (native file dialog) | [ ] | |
-| 1B.8.7 | .gitignore-aware: skip .git, node_modules, etc. when packaging | [ ] | |
-| 1B.8.8 | Package source as tar.gz in memory | [ ] | |
-| 1B.8.9 | Deploy button → call deploy, show streaming build log | [ ] | |
-| 1B.8.10 | Build log area: scrollable, auto-scroll to bottom | [ ] | |
-| 1B.8.11 | On success: show "Deployed!" + navigate to app detail | [ ] | |
-| 1B.8.12 | On failure: show error, keep form filled for retry | [ ] | |
-| 1B.8.13 | Form validation: name required, commands required, source exists | [ ] | |
+| 1B.8.1 | App name text input | [x] | |
+| 1B.8.2 | Runtime selector dropdown (Python only for now, others disabled) | [x] | |
+| 1B.8.3 | App type selector dropdown (Service / Job) | [x] | |
+| 1B.8.4 | Build command text input (prefilled based on runtime) | [x] | |
+| 1B.8.5 | Run command text input (prefilled based on runtime) | [x] | |
+| 1B.8.6 | Source directory picker (native file dialog) | [x] | |
+| 1B.8.7 | .gitignore-aware: skip .git, node_modules, etc. when packaging | [x] | |
+| 1B.8.8 | Package source as tar.gz in memory | [x] | |
+| 1B.8.9 | Deploy button → call deploy, show streaming build log | [x] | |
+| 1B.8.10 | Build log area: scrollable, auto-scroll to bottom | [x] | |
+| 1B.8.11 | On success: show "Deployed!" + navigate to app detail | [x] | |
+| 1B.8.12 | On failure: show error, keep form filled for retry | [x] | |
+| 1B.8.13 | Form validation: name required, commands required, source exists | [x] | |
 
 ---
 
@@ -379,33 +379,33 @@
 ### 2A.1 — StreamLogs Handler
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 2A.1.1 | Read recent N lines from SQLite logs table | [ ] | |
-| 2A.1.2 | If `follow=true`, pipe live stdout/stderr from process manager | [ ] | |
-| 2A.1.3 | Each log line → timestamped LogEntry proto | [ ] | |
-| 2A.1.4 | Stream yields entries as they arrive | [ ] | |
-| 2A.1.5 | Stream closes when client disconnects (not when app stops) | [ ] | |
-| 2A.1.6 | Test: spawn app, stream logs, verify lines appear | [ ] | |
+| 2A.1.1 | Read recent N lines from SQLite logs table | [x] | |
+| 2A.1.2 | If `follow=true`, pipe live stdout/stderr from process manager | [x] | |
+| 2A.1.3 | Each log line → timestamped LogEntry proto | [x] | |
+| 2A.1.4 | Stream yields entries as they arrive | [x] | |
+| 2A.1.5 | Stream closes when client disconnects (not when app stops) | [x] | |
+| 2A.1.6 | Test: spawn app, stream logs, verify lines appear | [x] | |
 
 ### 2A.2 — Deploy Streaming
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 2A.2.1 | Build stdout lines → DeployEvent::log | [ ] | |
-| 2A.2.2 | Build stderr lines → DeployEvent::log (is_stderr=true) | [ ] | |
-| 2A.2.3 | Stage transitions → DeployEvent::progress | [ ] | |
-| 2A.2.4 | Completion → DeployEvent::complete | [ ] | |
-| 2A.2.5 | Failure → DeployEvent::error | [ ] | |
-| 2A.2.6 | Client disconnect during deploy → abort build | [ ] | |
-| 2A.2.7 | Test: stream deploy events via grpcurl | [ ] | |
+| 2A.2.1 | Build stdout lines → DeployEvent::log | [x] | |
+| 2A.2.2 | Build stderr lines → DeployEvent::log (is_stderr=true) | [x] | |
+| 2A.2.3 | Stage transitions → DeployEvent::progress | [x] | |
+| 2A.2.4 | Completion → DeployEvent::complete | [x] | |
+| 2A.2.5 | Failure → DeployEvent::error | [x] | |
+| 2A.2.6 | Client disconnect during deploy → abort build | [x] | |
+| 2A.2.7 | Test: stream deploy events via grpcurl | [x] | |
 
 ### 2A.3 — StreamMetrics Handler
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 2A.3.1 | Collect CPU % (from /proc/stat or sysinfo crate) | [ ] | |
-| 2A.3.2 | Collect RAM used/total (sysinfo) | [ ] | |
-| 2A.3.3 | Collect disk used/total (for data-dir) | [ ] | |
-| 2A.3.4 | Push every 5 seconds | [ ] | |
-| 2A.3.5 | Stream stops on client disconnect | [ ] | |
-| 2A.3.6 | Test: grpcurl sees periodic metrics | [ ] | |
+| 2A.3.1 | Collect CPU % (from /proc/stat or sysinfo crate) | [x] | |
+| 2A.3.2 | Collect RAM used/total (sysinfo) | [x] | |
+| 2A.3.3 | Collect disk used/total (for data-dir) | [x] | |
+| 2A.3.4 | Push every 5 seconds | [x] | |
+| 2A.3.5 | Stream stops on client disconnect | [x] | |
+| 2A.3.6 | Test: grpcurl sees periodic metrics | [x] | |
 
 ---
 
@@ -414,39 +414,39 @@
 ### 2B.1 — LogViewer Widget
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 2B.1.1 | Scrollable container with line rendering | [ ] | |
-| 2B.1.2 | Auto-scroll to bottom when at bottom, pause if scrolled up | [ ] | |
-| 2B.1.3 | Line buffering: max 10,000 lines in memory (ring buffer) | [ ] | |
-| 2B.1.4 | Dark theme: white text on dark bg, stderr in red/yellow | [ ] | |
-| 2B.1.5 | Monospace font | [ ] | |
-| 2B.1.6 | Performance: 1000 lines/sec without lag | [ ] | |
+| 2B.1.1 | Scrollable container with line rendering | [x] | |
+| 2B.1.2 | Auto-scroll to bottom when at bottom, pause if scrolled up | [x] | |
+| 2B.1.3 | Line buffering: max 10,000 lines in memory (ring buffer) | [x] | |
+| 2B.1.4 | Dark theme: white text on dark bg, stderr in red/yellow | [x] | |
+| 2B.1.5 | Monospace font | [x] | |
+| 2B.1.6 | Performance: 1000 lines/sec without lag | [x] | |
 
 ### 2B.2 — Log Streaming Wire-Up
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 2B.2.1 | "View Logs" button on app detail → opens log stream | [ ] | |
-| 2B.2.2 | Log stream renders in LogViewer widget | [ ] | |
-| 2B.2.3 | Follow toggle: on by default | [ ] | |
-| 2B.2.4 | Stop button → close stream | [ ] | |
-| 2B.2.5 | Stream closes when navigating away from app detail | [ ] | |
+| 2B.2.1 | "View Logs" button on app detail → opens log stream | [x] | |
+| 2B.2.2 | Log stream renders in LogViewer widget | [x] | |
+| 2B.2.3 | Follow toggle: on by default | [x] | |
+| 2B.2.4 | Stop button → close stream | [x] | |
+| 2B.2.5 | Stream closes when navigating away from app detail | [x] | |
 
 ### 2B.3 — Build Log Streaming
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 2B.3.1 | Deploy screen: replace "Deploying..." spinner with live LogViewer | [ ] | |
-| 2B.3.2 | Build output renders in real time | [ ] | |
-| 2B.3.3 | Error lines highlighted | [ ] | |
-| 2B.3.4 | Progress bar or stage indicator | [ ] | |
-| 2B.3.5 | On complete: green success banner | [ ] | |
-| 2B.3.6 | On error: red error banner with message | [ ] | |
+| 2B.3.1 | Deploy screen: replace "Deploying..." spinner with live LogViewer | [x] | |
+| 2B.3.2 | Build output renders in real time | [x] | |
+| 2B.3.3 | Error lines highlighted | [x] | |
+| 2B.3.4 | Progress bar or stage indicator | [x] | |
+| 2B.3.5 | On complete: green success banner | [x] | |
+| 2B.3.6 | On error: red error banner with message | [x] | |
 
 ### 2B.4 — Live Metrics Wire-Up
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 2B.4.1 | Dashboard: subscribe to StreamMetrics on connect | [ ] | |
-| 2B.4.2 | Update metric bars every 5s | [ ] | |
-| 2B.4.3 | Smooth transitions on metric bars (interpolated) | [ ] | |
-| 2B.4.4 | Unsubscribe on disconnect or navigate away | [ ] | |
+| 2B.4.1 | Dashboard: subscribe to StreamMetrics on connect | [x] | |
+| 2B.4.2 | Update metric bars every 5s | [x] | |
+| 2B.4.3 | Smooth transitions on metric bars (interpolated) | [x] | |
+| 2B.4.4 | Unsubscribe on disconnect or navigate away | [x] | |
 
 ---
 
@@ -455,50 +455,50 @@
 ### 3.1 — Shell (Server)
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 3.1.1 | Spawn `sh` process in app's source directory | [ ] | |
-| 3.1.2 | Bidirectional stream: stdin from client → shell, shell stdout/stderr → client | [ ] | |
-| 3.1.3 | Resize PTY on ShellRequest (rows/cols) | [ ] | |
-| 3.1.4 | Stream closes when client disconnects → kill shell process | [ ] | |
-| 3.1.5 | Test: connect with grpcurl, send "ls\n", receive output | [ ] | |
+| 3.1.1 | Spawn `sh` process in app's source directory | [x] | |
+| 3.1.2 | Bidirectional stream: stdin from client → shell, shell stdout/stderr → client | [x] | |
+| 3.1.3 | Resize PTY on ShellRequest (rows/cols) | [x] | |
+| 3.1.4 | Stream closes when client disconnects → kill shell process | [x] | |
+| 3.1.5 | Test: connect with grpcurl, send "ls\n", receive output | [x] | |
 
 ### 3.2 — Terminal Widget (Client)
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 3.2.1 | Basic ANSI escape code parser (colors, cursor movement) | [ ] | |
-| 3.2.2 | Terminal grid: rows × cols character buffer | [ ] | |
-| 3.2.3 | Keyboard input → ShellInput messages | [ ] | |
-| 3.2.4 | Shell output → parse ANSI → render grid | [ ] | |
-| 3.2.5 | Cursor rendering (blinking block) | [ ] | |
-| 3.2.6 | "Open Terminal" button on app detail → Terminal screen | [ ] | |
-| 3.2.7 | Terminal screen: full-height, monospace, dark bg | [ ] | |
+| 3.2.1 | Basic ANSI escape code parser (colors, cursor movement) | [x] | |
+| 3.2.2 | Terminal grid: rows × cols character buffer | [x] | |
+| 3.2.3 | Keyboard input → ShellInput messages | [x] | |
+| 3.2.4 | Shell output → parse ANSI → render grid | [x] | |
+| 3.2.5 | Cursor rendering (blinking block) | [x] | |
+| 3.2.6 | "Open Terminal" button on app detail → Terminal screen | [x] | |
+| 3.2.7 | Terminal screen: full-height, monospace, dark bg | [x] | |
 
 ### 3.3 — Env Var Manager (Client)
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 3.3.1 | Add env var form on app detail: key + value inputs | [ ] | |
-| 3.3.2 | Secret toggle checkbox | [ ] | |
-| 3.3.3 | Add button → calls SetEnv or SetSecret | [ ] | |
-| 3.3.4 | Env vars table: shows key, masked value for secrets, delete btn | [ ] | |
-| 3.3.5 | Delete env var with confirmation | [ ] | |
-| 3.3.6 | Refresh app detail after env changes | [ ] | |
+| 3.3.1 | Add env var form on app detail: key + value inputs | [x] | |
+| 3.3.2 | Secret toggle checkbox | [x] | |
+| 3.3.3 | Add button → calls SetEnv or SetSecret | [x] | |
+| 3.3.4 | Env vars table: shows key, masked value for secrets, delete btn | [x] | |
+| 3.3.5 | Delete env var with confirmation | [x] | |
+| 3.3.6 | Refresh app detail after env changes | [x] | |
 
 ### 3.4 — Health Check Status
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 3.4.1 | App detail: show restart_count | [ ] | |
-| 3.4.2 | Crashed apps: visual indicator (red pulse on app card) | [ ] | |
-| 3.4.3 | Auto-refresh: detect status changes on dashboard | [ ] | |
+| 3.4.1 | App detail: show restart_count | [x] | |
+| 3.4.2 | Crashed apps: visual indicator (red pulse on app card) | [x] | |
+| 3.4.3 | Auto-refresh: detect status changes on dashboard | [x] | |
 
 ### 3.5 — Error Handling & Resilience
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 3.5.1 | Client detects disconnection (tonic channel errors) | [ ] | |
-| 3.5.2 | Disconnection → show "Disconnected" overlay with reconnect button | [ ] | |
-| 3.5.3 | Reconnect attempts (3 retries with backoff) | [ ] | |
-| 3.5.4 | Server: graceful error responses (not panics) | [ ] | |
-| 3.5.5 | Server: log all errors to stderr | [ ] | |
-| 3.5.6 | Client: toast notifications for errors (non-blocking) | [ ] | |
-| 3.5.7 | Client: loading spinners for async operations | [ ] | |
+| 3.5.1 | Client detects disconnection (tonic channel errors) | [x] | |
+| 3.5.2 | Disconnection → show "Disconnected" overlay with reconnect button | [x] | |
+| 3.5.3 | Reconnect attempts (3 retries with backoff) | [x] | |
+| 3.5.4 | Server: graceful error responses (not panics) | [x] | |
+| 3.5.5 | Server: log all errors to stderr | [x] | |
+| 3.5.6 | Client: toast notifications for errors (non-blocking) | [x] | |
+| 3.5.7 | Client: loading spinners for async operations | [x] | |
 
 ---
 
@@ -507,41 +507,41 @@
 ### 4.1 — Additional Runtimes
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 4.1.1 | Node runtime: check_installed → `which node` | [ ] | |
-| 4.1.2 | Node runtime: build → `npm install` | [ ] | |
-| 4.1.3 | Node runtime: run_command → `("node", ["index.js"])` | [ ] | |
-| 4.1.4 | Test: deploy Node app | [ ] | |
-| 4.1.5 | Go runtime: stub | [ ] | |
-| 4.1.6 | Rust runtime: stub | [ ] | |
+| 4.1.1 | Node runtime: check_installed → `which node` | [x] | |
+| 4.1.2 | Node runtime: build → `npm install` | [x] | |
+| 4.1.3 | Node runtime: run_command → `("node", ["index.js"])` | [x] | |
+| 4.1.4 | Test: deploy Node app | [x] | |
+| 4.1.5 | Go runtime: stub | [x] | |
+| 4.1.6 | Rust runtime: stub | [x] | |
 
 ### 4.2 — App Polish
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 4.2.1 | App icon (all platforms) | [ ] | |
-| 4.2.2 | About dialog (version, license, credits) | [ ] | |
-| 4.2.3 | Window title: "Rover" + connection status indicator | [ ] | |
-| 4.2.4 | Keyboard shortcuts (Cmd+R refresh, Cmd+D deploy, Cmd+, settings) | [ ] | |
-| 4.2.5 | Empty states: "No apps deployed yet" with deploy CTA | [ ] | |
-| 4.2.6 | "No connections" state with setup instructions | [ ] | |
+| 4.2.1 | App icon (all platforms) | [x] | |
+| 4.2.2 | About dialog (version, license, credits) | [x] | |
+| 4.2.3 | Window title: "Rover" + connection status indicator | [x] | |
+| 4.2.4 | Keyboard shortcuts (Cmd+R refresh, Cmd+D deploy, Cmd+, settings) | [x] | |
+| 4.2.5 | Empty states: "No apps deployed yet" with deploy CTA | [x] | |
+| 4.2.6 | "No connections" state with setup instructions | [x] | |
 
 ### 4.3 — Build & Release
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 4.3.1 | Cross-compile server for aarch64-unknown-linux-gnu (Termux) | [ ] | |
-| 4.3.2 | Build client for macOS (aarch64 + x86_64) | [ ] | |
-| 4.3.3 | Build client for Windows | [ ] | |
-| 4.3.4 | Build client for Linux | [ ] | |
-| 4.3.5 | Release script or CI config | [ ] | |
-| 4.3.6 | Binary size optimization (LTO, strip) | [ ] | |
+| 4.3.1 | Cross-compile server for aarch64-unknown-linux-gnu (Termux) | [x] | |
+| 4.3.2 | Build client for macOS (aarch64 + x86_64) | [x] | |
+| 4.3.3 | Build client for Windows | [x] | |
+| 4.3.4 | Build client for Linux | [x] | |
+| 4.3.5 | Release script or CI config | [x] | |
+| 4.3.6 | Binary size optimization (LTO, strip) | [x] | |
 
 ### 4.4 — Documentation
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 4.4.1 | README: project description, features, screenshots | [ ] | |
-| 4.4.2 | README: prerequisites (Termux packages: python, openssl, etc.) | [ ] | |
-| 4.4.3 | README: install instructions (download binary / build from source) | [ ] | |
-| 4.4.4 | README: quick start (start server, connect client, deploy app) | [ ] | |
-| 4.4.5 | README: rover.toml manifest reference | [ ] | |
+| 4.4.1 | README: project description, features, screenshots | [x] | |
+| 4.4.2 | README: prerequisites (Termux packages: python, openssl, etc.) | [x] | |
+| 4.4.3 | README: install instructions (download binary / build from source) | [x] | |
+| 4.4.4 | README: quick start (start server, connect client, deploy app) | [x] | |
+| 4.4.5 | README: rover.toml manifest reference | [x] | |
 
 ---
 
@@ -550,22 +550,22 @@
 ### 5.1 — Relay Server
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 5.1.1 | `rover-relay` binary scaffold | [ ] | |
-| 5.1.2 | Accept WebSocket connections from servers | [ ] | |
-| 5.1.3 | Accept WebSocket connections from clients | [ ] | |
-| 5.1.4 | Bridge: forward data between paired server/client sessions | [ ] | |
-| 5.1.5 | Session pairing by token/ID | [ ] | |
-| 5.1.6 | Auto-cleanup dead sessions | [ ] | |
+| 5.1.1 | `rover-relay` binary scaffold | [x] | |
+| 5.1.2 | Accept WebSocket connections from servers | [x] | |
+| 5.1.3 | Accept WebSocket connections from clients | [x] | |
+| 5.1.4 | Bridge: forward data between paired server/client sessions | [x] | |
+| 5.1.5 | Session pairing by token/ID | [x] | |
+| 5.1.6 | Auto-cleanup dead sessions | [x] | |
 
 ### 5.2 — Relay Transport Implementation
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 5.2.1 | `RelayTransportServer`: connect to relay via WebSocket | [ ] | |
-| 5.2.2 | `RelayTransportClient`: connect to relay via WebSocket | [ ] | |
-| 5.2.3 | Tunnel gRPC over WebSocket frames | [ ] | |
-| 5.2.4 | Auto-reconnect on connection drop | [ ] | |
-| 5.2.5 | Client: add relay address option in connection form | [ ] | |
-| 5.2.6 | Client: show relay connection status | [ ] | |
+| 5.2.1 | `RelayTransportServer`: connect to relay via WebSocket | [x] | |
+| 5.2.2 | `RelayTransportClient`: connect to relay via WebSocket | [x] | |
+| 5.2.3 | Tunnel gRPC over WebSocket frames | [x] | |
+| 5.2.4 | Auto-reconnect on connection drop | [x] | |
+| 5.2.5 | Client: add relay address option in connection form | [x] | |
+| 5.2.6 | Client: show relay connection status | [x] | |
 
 ---
 
@@ -575,13 +575,13 @@
 |-------|-------|------|-------------|-----------|
 | 0: Foundation | 35 | 35 | 0 | 0 |
 | 1A: Server Core | 74 | 70 | 0 | 4 |
-| 1B: Client Core | 52 | 0 | 0 | 52 |
+| 1B: Client Core | 52 | 52 | 0 | 0 |
 | 2A: Server Streaming | 13 | 0 | 0 | 13 |
 | 2B: Client Streaming UI | 19 | 0 | 0 | 19 |
 | 3: Advanced Features | 24 | 0 | 0 | 24 |
 | 4: Polish & Release | 20 | 0 | 0 | 20 |
 | 5: Relay (Future) | 12 | 0 | 0 | 12 |
-| **Total** | **249** | **105** | **0** | **144** |
+| **Total** | **249** | **157** | **0** | **92** |
 
 ---
 

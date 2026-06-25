@@ -60,7 +60,7 @@ pkg install python3 openssl
 From your Android phone running Termux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/refs/heads/main/scripts/install.sh | bash
 ```
 
 This installs dependencies, clones the repo, builds the server, and launches it — all in one command.
@@ -68,7 +68,7 @@ This installs dependencies, clones the repo, builds the server, and launches it 
 To use a custom port:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/main/scripts/install.sh | bash -s -- 8080
+curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/refs/heads/main/scripts/install.sh | bash -s -- 8080
 ```
 
 ### Update & Relaunch (Android/Termux)
@@ -76,7 +76,7 @@ curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/main/scripts/i
 When you've pushed new code and want to rebuild and restart:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/main/scripts/update.sh | bash
+curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/refs/heads/main/scripts/update.sh | bash
 ```
 
 This pulls the latest commit, rebuilds, and relaunches.

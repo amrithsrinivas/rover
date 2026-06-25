@@ -1,66 +1,64 @@
+use rover_proto::v1::{AppDetailResponse, AppSummary, ServerInfo, ServerMetrics};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+use crate::api::client::RoverClient;
+
 /// Message enum for all UI events and async responses.
-/// Shared across all screens and widgets.
 #[derive(Debug, Clone)]
 pub enum Message {
     // Navigation
     Navigate(crate::Screen),
-
-    // Periodic refresh
     Tick,
+    Noop,
 
-    // Connection
-    Connect {
-        address: String,
-        pairing_token: String,
-    },
-    ConnectWithApiKey {
-        address: String,
-        api_key: String,
-    },
-    Disconnect,
-    ConnectionSuccess,
+    // Connection form
+    SetAddressInput(String),
+    SetTokenInput(String),
+    SetProfileName(String),
+    Connect,
+    ConnectWithKey(String, String),
+    ConnectionSuccess(Arc<Mutex<RoverClient>>, String),
     ConnectionError(String),
-
-    // Profile management
-    SaveProfile(String, String),
+    Disconnect,
     DeleteProfile(String),
 
     // Server data
-    ServerInfoRefreshed,
-    MetricsRefreshed,
-    AppListRefreshed,
+    Refresh,
+    RefreshApps,
+    DataRefreshed(Box<ServerInfo>, Box<ServerMetrics>),
+    AppsRefreshed(Vec<AppSummary>),
 
-    // App actions
+    // App detail
     SelectApp(String),
-    DeployApp,
+    AppDetailLoaded(Box<AppDetailResponse>),
     StartApp(String),
     StopApp(String),
     RestartApp(String),
     DeleteApp(String),
-    AppActionComplete(Result<(), String>),
 
-    // Streaming
-    LogEntryReceived(String),
-    DeployEventReceived(String),
-    MetricsUpdate,
+    // Deploy
+    Deploy,
+    SubmitDeploy,
+    DeployComplete,
+    DeployError(String),
+    SetDeployName(String),
+    SetDeployBuildCmd(String),
+    SetDeployRunCmd(String),
+    SetDeployRuntime(String),
+    SetDeployAppType(String),
+    SetDeploySourcePath(String),
+    PickSourceDirectory,
 
     // Env vars
-    SetEnvVar {
-        app_id: String,
-        key: String,
-        value: String,
-    },
-    DeleteEnvVar {
-        app_id: String,
-        key: String,
-    },
-
-    // Shell
-    OpenShell(String),
-    CloseShell,
-    ShellInput(Vec<u8>),
-    ShellOutput(Vec<u8>),
+    SetEnvKey(String),
+    SetEnvValue(String),
+    SetEnvSecret(bool),
+    AddEnvVar,
+    SaveProfile(String, String),
 
     // UI
     DismissToast(usize),
+    ToastError(String),
+    ToastInfo(String),
 }

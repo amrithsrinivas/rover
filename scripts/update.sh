@@ -1,6 +1,6 @@
 #!/bin/bash
 # Rover — update, rebuild, and relaunch
-# Usage: curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/main/scripts/update.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/amrithsrinivas/rover/refs/heads/main/scripts/update.sh | bash
 
 set -euo pipefail
 

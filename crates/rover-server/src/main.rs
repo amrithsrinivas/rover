@@ -8,7 +8,6 @@ mod state;
 
 use clap::Parser;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 /// Rover — a tiny PaaS that runs on Android/Termux.
 #[derive(Parser, Debug)]
