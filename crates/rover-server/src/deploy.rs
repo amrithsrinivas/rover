@@ -81,8 +81,8 @@ impl Deployer {
 
         // Spawn the full deploy as a background task so the channel doesn't block
         tokio::spawn(async move {
-            let _ = run_deploy(
-                tx,
+            if let Err(e) = run_deploy(
+                tx.clone(),
                 &app_id,
                 &app_name,
                 &runtime_str,
@@ -97,7 +97,13 @@ impl Deployer {
                 &pm,
                 &registry,
             )
-            .await;
+            .await
+            {
+                tracing::error!(app_id=%app_id, error=%e, "deploy failed");
+                let _ = tx
+                    .send(DeployEvent::error(format!("deploy failed: {e}")))
+                    .await;
+            }
         });
 
         Ok(rx)
@@ -123,13 +129,33 @@ async fn run_deploy(
     tracing::info!(app_id=%app_id, app_name=%app_name, runtime=%runtime_str, "deploy starting");
     tracing::info!(app_id=%app_id, "source archive size: {} bytes", source_tar_gz.len());
     use rover_core::Runtime;
-    let runtime: Runtime = runtime_str
-        .parse()
-        .map_err(|e: String| anyhow::anyhow!(e))?;
+    let runtime: Runtime = match runtime_str.parse() {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(app_id=%app_id, "invalid runtime '{runtime_str}': {e}");
+            let _ = tx
+                .send(DeployEvent::error(format!(
+                    "invalid runtime: {runtime_str}"
+                )))
+                .await;
+            store.update_app_status(app_id, "failed")?;
+            return Ok(());
+        }
+    };
 
-    let handler = registry
-        .get_handler(runtime)
-        .ok_or_else(|| anyhow::anyhow!("runtime not available: {runtime_str}"))?;
+    let handler = match registry.get_handler(runtime) {
+        Some(h) => h,
+        None => {
+            tracing::error!(app_id=%app_id, "runtime {runtime_str} not registered");
+            let _ = tx
+                .send(DeployEvent::error(format!(
+                    "runtime not available: {runtime_str}"
+                )))
+                .await;
+            store.update_app_status(app_id, "failed")?;
+            return Ok(());
+        }
+    };
 
     // Check runtime installed
     if !handler.check_installed().await? {
