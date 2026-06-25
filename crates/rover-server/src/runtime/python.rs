@@ -5,7 +5,6 @@ use rover_core::{RoverError, Runtime};
 
 use super::RuntimeHandler;
 
-/// Python runtime handler.
 pub struct PythonRuntime;
 
 impl PythonRuntime {
@@ -20,14 +19,13 @@ impl RuntimeHandler for PythonRuntime {
         Runtime::Python
     }
 
+    /// Check if Python is installed via `which python`.
     async fn check_installed(&self) -> Result<bool, RoverError> {
         let output = tokio::process::Command::new("which")
-            .arg("python3")
+            .arg("python")
             .output()
             .await
-            .map_err(|e| {
-                RoverError::RuntimeNotAvailable(format!("failed to check python3: {e}"))
-            })?;
+            .map_err(|e| RoverError::RuntimeNotAvailable(format!("failed to check python: {e}")))?;
 
         Ok(output.status.success())
     }
@@ -52,10 +50,8 @@ impl RuntimeHandler for PythonRuntime {
         Ok(())
     }
 
-    fn run_command(&self, app_dir: &Path, command: &str) -> (String, Vec<String>) {
-        // Parse the run command into the binary + args.
-        // For simplicity, we use `sh -c <command>` so shell features (pipes, etc.) work.
-        let _ = app_dir;
+    fn run_command(&self, _app_dir: &Path, command: &str) -> (String, Vec<String>) {
+        // Use `sh -c` so shell features (pipes, redirects, etc.) work
         (
             "sh".to_string(),
             vec!["-c".to_string(), command.to_string()],
