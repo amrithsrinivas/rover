@@ -12,7 +12,6 @@ echo "========================================"
 echo "  Rover — Install & Launch"
 echo "========================================"
 echo ""
-
 # 1. Install dependencies via pkg
 echo "[1/4] Installing dependencies..."
 pkg update -y > /dev/null 2>&1
@@ -26,9 +25,10 @@ pkg install -y \
     make \
     cmake \
     pkg-config \
+    golang \
+    nodejs \
     > /dev/null 2>&1
 echo "  ✓ Dependencies installed"
-
 # 2. Clone or update the repo
 echo "[2/4] Fetching Rover source..."
 if [ -d "$INSTALL_DIR" ]; then

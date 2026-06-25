@@ -72,11 +72,8 @@ pub struct RoverApp {
 impl RoverApp {
     fn new() -> (Self, Task<Message>) {
         let profiles = rover_core::ConnectionProfileStore::load_from_disk().unwrap_or_default();
-        let screen = if profiles.profiles.is_empty() {
-            Screen::Connections
-        } else {
-            Screen::Dashboard
-        };
+        // Always start on the connections screen
+        let screen = Screen::Connections;
         (
             Self {
                 screen,
@@ -197,6 +194,7 @@ impl RoverApp {
                 self.connection_error = Some(e);
                 self.loading = false;
                 self.connected = false;
+                self.screen = Screen::Connections;
                 if self.reconnect_attempts < 3 && self.reconnect_addr.is_some() {
                     self.reconnect_attempts += 1;
                     return Task::perform(
@@ -790,6 +788,9 @@ impl RoverApp {
             button(text(label).size(14)).width(Length::Fill);
         if self.screen == screen {
             b = b.style(button::primary);
+        } else if !self.connected && screen != Screen::Connections {
+            // Disable Dashboard and Deploy when not connected
+            b = b.style(button::text);
         } else {
             b = b.style(button::text).on_press(Message::Navigate(screen));
         }
