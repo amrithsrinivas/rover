@@ -19,15 +19,16 @@ impl RuntimeHandler for PythonRuntime {
         Runtime::Python
     }
 
-    /// Check if Python is installed via `which python`.
+    /// Check if Python is installed by trying to run `python --version`.
     async fn check_installed(&self) -> Result<bool, RoverError> {
-        let output = tokio::process::Command::new("which")
-            .arg("python")
+        let output = tokio::process::Command::new("python")
+            .arg("--version")
             .output()
-            .await
-            .map_err(|e| RoverError::RuntimeNotAvailable(format!("failed to check python: {e}")))?;
-
-        Ok(output.status.success())
+            .await;
+        match output {
+            Ok(o) if o.status.success() => Ok(true),
+            _ => Ok(false),
+        }
     }
 
     async fn build(&self, app_dir: &Path, command: &str) -> Result<(), RoverError> {
