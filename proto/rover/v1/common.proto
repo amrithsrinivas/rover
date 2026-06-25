@@ -11,12 +11,6 @@ enum Runtime {
   RUNTIME_RUST = 4;
 }
 
-enum AppType {
-  APP_TYPE_UNSPECIFIED = 0;
-  APP_TYPE_SERVICE = 1;
-  APP_TYPE_JOB = 2;
-}
-
 enum AppStatus {
   APP_STATUS_UNSPECIFIED = 0;
   APP_STATUS_DEPLOYING = 1;

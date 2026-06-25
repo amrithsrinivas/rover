@@ -309,15 +309,9 @@ impl AppService for RoverServer {
         let (program, args) = crate::process::parse_shell_command(&app.run_command);
         let source_dir = std::path::PathBuf::from(&app.source_dir);
 
+        // start_app handler
         self.process_manager
-            .spawn(
-                &app_id,
-                &program,
-                &args,
-                &env_vars,
-                &source_dir,
-                &app.app_type,
-            )
+            .spawn(&app_id, &program, &args, &env_vars, &source_dir)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
@@ -384,15 +378,9 @@ impl AppService for RoverServer {
         let (program, args) = crate::process::parse_shell_command(&app.run_command);
         let source_dir = std::path::PathBuf::from(&app.source_dir);
 
+        // restart_app handler
         self.process_manager
-            .spawn(
-                &app_id,
-                &program,
-                &args,
-                &env_vars,
-                &source_dir,
-                &app.app_type,
-            )
+            .spawn(&app_id, &program, &args, &env_vars, &source_dir)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
@@ -640,7 +628,6 @@ fn app_to_summary(app: &AppRow) -> v1::AppSummary {
         app_id: app.app_id.clone(),
         name: app.name.clone(),
         runtime: runtime_to_proto(&app.runtime),
-        app_type: app_type_to_proto(&app.app_type),
         status: status_to_proto(&app.status),
         created_at: Some(v1::Timestamp {
             millis: app.created_at,
@@ -663,7 +650,6 @@ fn app_to_detail(app: &AppRow, store: &StateStore) -> Result<v1::AppDetailRespon
         app_id: app.app_id.clone(),
         name: app.name.clone(),
         runtime: runtime_to_proto(&app.runtime),
-        app_type: app_type_to_proto(&app.app_type),
         status: status_to_proto(&app.status),
         build_command: app.build_command.clone(),
         run_command: app.run_command.clone(),
@@ -685,14 +671,6 @@ fn runtime_to_proto(s: &str) -> i32 {
         "node" => 2,
         "go" => 3,
         "rust" => 4,
-        _ => 0,
-    }
-}
-
-fn app_type_to_proto(s: &str) -> i32 {
-    match s {
-        "service" => 1,
-        "job" => 2,
         _ => 0,
     }
 }

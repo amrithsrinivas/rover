@@ -39,7 +39,6 @@ pub struct RoverApp {
     pub deploy_build_cmd: String,
     pub deploy_run_cmd: String,
     pub deploy_runtime: String,
-    pub deploy_app_type: String,
     pub deploy_source_path: String,
     pub deploying: bool,
     pub deploy_log: Vec<String>,
@@ -59,6 +58,10 @@ pub struct RoverApp {
     // Terminal
     pub terminal_input: String,
     pub terminal_output: Vec<String>,
+    // Delete confirmation
+    pub confirm_delete: Option<(String, String)>, // (app_id, app_name)
+    // Live log streaming state
+    pub log_stream_active: bool,
 }
 
 impl RoverApp {
@@ -88,7 +91,6 @@ impl RoverApp {
                 deploy_build_cmd: String::new(),
                 deploy_run_cmd: String::new(),
                 deploy_runtime: "python".into(),
-                deploy_app_type: "service".into(),
                 deploy_source_path: String::new(),
                 deploying: false,
                 deploy_log: vec![],
@@ -104,6 +106,8 @@ impl RoverApp {
                 reconnect_key: None,
                 terminal_input: String::new(),
                 terminal_output: vec![],
+                confirm_delete: None,
+                log_stream_active: false,
             },
             Task::none(),
         )
@@ -240,7 +244,25 @@ impl RoverApp {
                 self.server_info = Some(*info);
                 self.metrics = Some(*metrics);
             }
-            Message::AppsRefreshed(apps) => self.apps = apps,
+            Message::AppsRefreshed(apps) => {
+                self.apps = apps;
+                // If we just deleted an app, go back to dashboard
+                if self.confirm_delete.is_none()
+                    && self.screen == Screen::AppDetail
+                    && self.app_detail.is_some()
+                {
+                    // Check if the selected app still exists
+                    if self
+                        .selected_app
+                        .as_ref()
+                        .map_or(true, |id| !self.apps.iter().any(|a| a.app_id == *id))
+                    {
+                        self.app_detail = None;
+                        self.selected_app = None;
+                        self.screen = Screen::Dashboard;
+                    }
+                }
+            }
 
             Message::SelectApp(id) => {
                 let app_id = id.clone();
@@ -276,7 +298,7 @@ impl RoverApp {
                                 Ok(lines)
                             },
                             |r: Result<Vec<String>, String>| match r {
-                                Ok(lines) => Message::LogLinesReceived(lines),
+                                Ok(l) => Message::LogLinesReceived(l),
                                 Err(e) => Message::ToastError(e),
                             },
                         ),
@@ -323,6 +345,22 @@ impl RoverApp {
                 }
             }
             Message::DeleteApp(id) => {
+                // Show confirmation modal instead of immediately deleting
+                let name = self
+                    .app_detail
+                    .as_ref()
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| id.clone());
+                self.confirm_delete = Some((id, name));
+            }
+            Message::CancelDelete => {
+                self.confirm_delete = None;
+            }
+            Message::ConfirmDelete((id, _name)) => {
+                self.confirm_delete = None;
+                return Task::done(Message::ExecuteDelete(id));
+            }
+            Message::ExecuteDelete(id) => {
                 if let Some(ref c) = self.client {
                     let c2 = c.clone();
                     let id2 = id;
@@ -333,7 +371,32 @@ impl RoverApp {
                             cl.list_apps().await.map(|r| r.apps)
                         },
                         |r: Result<Vec<AppSummary>, String>| match r {
-                            Ok(a) => Message::AppsRefreshed(a),
+                            Ok(apps) => Message::AppsRefreshed(apps),
+                            Err(e) => Message::ToastError(e),
+                        },
+                    );
+                }
+            }
+            Message::RefreshLogs => {
+                // Reload logs for the current app
+                if let (Some(app_id), Some(c)) = (&self.log_app_id, &self.client) {
+                    let id = app_id.clone();
+                    let c2 = c.clone();
+                    return Task::perform(
+                        async move {
+                            let mut rx = c2.lock().await.stream_logs(&id, false, 500).await?;
+                            let mut lines = vec![];
+                            while let Some(Ok(entry)) = rx.recv().await {
+                                lines.push(format!(
+                                    "{} {}",
+                                    if entry.is_stderr { "[stderr]" } else { "" },
+                                    entry.line
+                                ));
+                            }
+                            Ok(lines)
+                        },
+                        |r: Result<Vec<String>, String>| match r {
+                            Ok(lines) => Message::LogLinesReceived(lines),
                             Err(e) => Message::ToastError(e),
                         },
                     );
@@ -347,7 +410,6 @@ impl RoverApp {
                 self.deploy_build_cmd = "pip install -r requirements.txt".into();
                 self.deploy_run_cmd = "python3 main.py".into();
                 self.deploy_runtime = "python".into();
-                self.deploy_app_type = "service".into();
                 self.deploy_source_path.clear();
                 self.deploying = false;
                 self.deploy_log.clear();
@@ -356,7 +418,6 @@ impl RoverApp {
             Message::SetDeployBuildCmd(v) => self.deploy_build_cmd = v,
             Message::SetDeployRunCmd(v) => self.deploy_run_cmd = v,
             Message::SetDeployRuntime(v) => self.deploy_runtime = v,
-            Message::SetDeployAppType(v) => self.deploy_app_type = v,
             Message::SetDeploySourcePath(v) => self.deploy_source_path = v,
             Message::PickSourceDirectory => {
                 return Task::perform(
@@ -383,12 +444,8 @@ impl RoverApp {
 
                 let app_name = self.deploy_name.clone();
                 let manifest = format!(
-                    "[app]\nname = \"{}\"\nruntime = \"{}\"\ntype = \"{}\"\n\n[build]\ncommand = \"{}\"\n\n[run]\ncommand = \"{}\"\n",
-                    app_name,
-                    self.deploy_runtime,
-                    self.deploy_app_type,
-                    self.deploy_build_cmd,
-                    self.deploy_run_cmd,
+                    "[app]\nname = \"{}\"\nruntime = \"{}\"\ntype = \"service\"\n\n[build]\ncommand = \"{}\"\n\n[run]\ncommand = \"{}\"\n",
+                    app_name, self.deploy_runtime, self.deploy_build_cmd, self.deploy_run_cmd,
                 );
                 let source_path = self.deploy_source_path.clone();
 
@@ -404,11 +461,10 @@ impl RoverApp {
                                 source_path
                             );
                             let rt = runtime_to_proto(&manifest);
-                            let at = app_type_to_proto(&manifest);
                             let mut rx = c2
                                 .lock()
                                 .await
-                                .deploy_stream(app_name, rt, at, manifest, archive)
+                                .deploy_stream(app_name, rt, manifest, archive)
                                 .await?;
                             let mut events = vec![];
                             while let Some(event) = rx.recv().await {
@@ -511,10 +567,14 @@ impl RoverApp {
 
             Message::Tick => {
                 if self.connected {
-                    return Task::batch(vec![
+                    let mut tasks = vec![
                         Task::done(Message::Refresh),
                         Task::done(Message::RefreshApps),
-                    ]);
+                    ];
+                    if self.screen == Screen::AppDetail && self.log_app_id.is_some() {
+                        tasks.push(Task::done(Message::RefreshLogs));
+                    }
+                    return Task::batch(tasks);
                 }
             }
             Message::ToastError(m) => self.toasts.push(format!("Error: {m}")),
@@ -555,12 +615,16 @@ impl RoverApp {
             Screen::Terminal => self.terminal_screen(),
         };
         let main = row![sidebar, content];
-        if self.toasts.is_empty() {
+
+        // Toast overlays
+        let mut stack_elements: Vec<Element<Message>> = vec![
             container(main)
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .into()
-        } else {
+                .into(),
+        ];
+
+        if !self.toasts.is_empty() {
             let tc: Vec<Element<_>> = self
                 .toasts
                 .iter()
@@ -571,19 +635,58 @@ impl RoverApp {
                         .into()
                 })
                 .collect();
-            let ov = container(column(tc).spacing(4)).padding(8);
-            iced::widget::stack([
-                container(main)
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .into(),
-                container(ov)
+            stack_elements.push(
+                container(column(tc).spacing(4).padding(8))
                     .padding(16)
                     .width(Length::Fill)
                     .height(Length::Fill)
                     .into(),
-            ])
-            .into()
+            );
+        }
+
+        // Delete confirmation modal
+        if let Some((ref app_id, ref app_name)) = self.confirm_delete {
+            let modal = container(
+                column![
+                    text(format!("Delete {app_name}?")).size(18),
+                    text("This will permanently delete the app and all its data.").size(13),
+                    Space::new(0, 12),
+                    row![
+                        button(text("Cancel")).on_press(Message::CancelDelete),
+                        Space::new(8, 0),
+                        button(text("Delete"))
+                            .style(button::danger)
+                            .on_press(Message::ConfirmDelete((app_id.clone(), app_name.clone()))),
+                    ]
+                    .spacing(8),
+                ]
+                .spacing(8)
+                .padding(20),
+            )
+            .style(|_: &iced::Theme| container::Style {
+                background: Some(theme::colors::SURFACE.into()),
+                border: iced::Border {
+                    color: theme::colors::DANGER,
+                    width: 1.0,
+                    radius: 8.0.into(),
+                },
+                ..container::Style::default()
+            });
+
+            // Center the modal
+            let overlay = container(modal)
+                .center_x(Length::Fill)
+                .center_y(Length::Fill)
+                .width(Length::Fill)
+                .height(Length::Fill);
+
+            stack_elements.push(overlay.into());
+        }
+
+        if stack_elements.len() == 1 {
+            stack_elements.remove(0)
+        } else {
+            iced::widget::stack(stack_elements).into()
         }
     }
 
@@ -794,7 +897,6 @@ impl RoverApp {
         };
         let (s, sc) = sd(d.status);
         let (r, _) = rd(d.runtime);
-        let (t, _) = ad(d.app_type);
         let ev: Vec<Element<_>> = d
             .env_vars
             .iter()
@@ -827,7 +929,7 @@ impl RoverApp {
                 ],
                 Space::new(0, 8),
                 text(format!(
-                    "Runtime: {r}  |  Type: {t}  |  PID: {}  |  Restarts: {}",
+                    "Runtime: {r}  |  PID: {}  |  Restarts: {}",
                     d.pid.map_or("-".into(), |p| p.to_string()),
                     d.restart_count
                 ))
@@ -868,7 +970,11 @@ impl RoverApp {
                     button(text("+ Add")).on_press(Message::AddEnvVar)
                 ],
                 Space::new(0, 16),
-                text("Logs").size(16),
+                row![
+                    text("Logs").size(16),
+                    Space::new(Length::Fill, 0),
+                    button(text("↻ Refresh").size(12)).on_press(Message::RefreshLogs),
+                ],
                 container(scrollable(column(log_lines).spacing(1)))
                     .style(|_: &iced::Theme| container::Style {
                         background: Some(iced::Color::from_rgb(0.05, 0.05, 0.08).into()),
@@ -922,9 +1028,6 @@ impl RoverApp {
                     .padding(8),
                 text_input("Runtime (python/node/go/rust)", &self.deploy_runtime)
                     .on_input(Message::SetDeployRuntime)
-                    .padding(8),
-                text_input("Type (service/job)", &self.deploy_app_type)
-                    .on_input(Message::SetDeployAppType)
                     .padding(8),
                 row![
                     text_input("Source directory", &self.deploy_source_path)
@@ -988,12 +1091,8 @@ fn rd(r: i32) -> (&'static str, iced::Color) {
         _ => ("?", theme::colors::TEXT_MUTED),
     }
 }
-fn ad(a: i32) -> (&'static str, iced::Color) {
-    match a {
-        1 => ("service", theme::colors::TEXT),
-        2 => ("job", theme::colors::TEXT_MUTED),
-        _ => ("?", theme::colors::TEXT_MUTED),
-    }
+fn ad(_a: i32) -> (&'static str, iced::Color) {
+    ("-", theme::colors::TEXT_MUTED)
 }
 
 fn stat_badge(label: String, color: iced::Color) -> Element<'static, Message> {
@@ -1065,10 +1164,6 @@ fn runtime_to_proto(manifest: &str) -> i32 {
     } else {
         1
     }
-}
-
-fn app_type_to_proto(manifest: &str) -> i32 {
-    if manifest.contains("job") { 2 } else { 1 }
 }
 
 fn main() -> iced::Result {

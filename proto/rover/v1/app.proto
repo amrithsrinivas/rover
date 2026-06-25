@@ -8,7 +8,7 @@ import "rover/v1/common.proto";
 message DeployRequest {
   string name = 1;
   Runtime runtime = 2;
-  AppType app_type = 3;
+  reserved 3;
   string manifest_toml = 4;
   bytes source_archive = 5;
 }
@@ -54,7 +54,7 @@ message AppDetailResponse {
   string app_id = 1;
   string name = 2;
   Runtime runtime = 3;
-  AppType app_type = 4;
+  reserved 4;
   AppStatus status = 5;
   string build_command = 6;
   string run_command = 7;

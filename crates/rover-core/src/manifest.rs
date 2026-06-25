@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{AppType, RoverError, Runtime};
+use crate::{RoverError, Runtime};
 
 /// The deployment manifest (`rover.toml`) that defines how to build and run an app.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,9 +18,6 @@ pub struct AppSection {
     pub name: String,
     /// The runtime language.
     pub runtime: String,
-    /// "service" or "job"
-    #[serde(rename = "type")]
-    pub app_type: String,
     /// Optional informational version.
     #[serde(default)]
     pub version: Option<String>,
@@ -67,12 +64,6 @@ impl AppManifest {
             .parse()
             .map_err(|e| RoverError::ManifestValidation(e))?;
 
-        let _: AppType = self
-            .app
-            .app_type
-            .parse()
-            .map_err(|e| RoverError::ManifestValidation(e))?;
-
         if self.build.command.trim().is_empty() {
             return Err(RoverError::ManifestValidation(
                 "build.command is required".into(),
@@ -95,14 +86,6 @@ impl AppManifest {
             .parse()
             .map_err(|e| RoverError::ManifestValidation(e))
     }
-
-    /// The parsed AppType enum value.
-    pub fn app_type(&self) -> Result<AppType, RoverError> {
-        self.app
-            .app_type
-            .parse()
-            .map_err(|e| RoverError::ManifestValidation(e))
-    }
 }
 
 #[cfg(test)]
@@ -114,7 +97,6 @@ mod tests {
 [app]
 name = "my-app"
 runtime = "python"
-type = "service"
 
 [build]
 command = "pip install -r requirements.txt"
@@ -133,7 +115,6 @@ DATABASE_URL = "sqlite:///data.db"
         assert_eq!(m.app.name, "my-app");
         assert_eq!(m.app.runtime, "python");
         assert_eq!(m.runtime().unwrap(), Runtime::Python);
-        assert_eq!(m.app_type().unwrap(), AppType::Service);
     }
 
     #[test]
@@ -145,12 +126,6 @@ DATABASE_URL = "sqlite:///data.db"
     #[test]
     fn reject_unknown_runtime() {
         let toml = valid_toml().replace("python", "lua");
-        assert!(AppManifest::from_toml(&toml).is_err());
-    }
-
-    #[test]
-    fn reject_invalid_type() {
-        let toml = valid_toml().replace("service", "cronjob");
         assert!(AppManifest::from_toml(&toml).is_err());
     }
 

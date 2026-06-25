@@ -39,7 +39,6 @@ pub enum Message {
     SetDeployBuildCmd(String),
     SetDeployRunCmd(String),
     SetDeployRuntime(String),
-    SetDeployAppType(String),
     SetDeploySourcePath(String),
     PickSourceDirectory,
     SetEnvKey(String),
@@ -56,4 +55,8 @@ pub enum Message {
     SendTerminalInput,
     TerminalOutput(String),
     LoadLogs,
+    ConfirmDelete((String, String)),
+    CancelDelete,
+    ExecuteDelete(String),
+    RefreshLogs,
 }

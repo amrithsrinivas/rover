@@ -240,14 +240,12 @@ impl RoverClient {
         &mut self,
         name: String,
         runtime: i32,
-        app_type: i32,
         manifest_toml: String,
         source_archive: Vec<u8>,
     ) -> Result<mpsc::Receiver<Result<DeployEvent, String>>, String> {
         let mut req = Request::new(DeployRequest {
             name,
             runtime,
-            app_type,
             manifest_toml,
             source_archive,
         });

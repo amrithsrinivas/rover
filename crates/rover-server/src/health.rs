@@ -71,22 +71,10 @@ mod tests {
             .unwrap();
 
         let pm = ProcessManager::new(store.clone());
-        // Spawn a very short-lived process
-        let pid = pm
-            .spawn(
-                "h",
-                "echo",
-                &["hi".into()],
-                &std::collections::HashMap::new(),
-                dir.path(),
-                "service",
-            )
-            .await
-            .unwrap();
-        assert!(pid > 0);
-
-        // Wait for exit
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        // Simulate a process that died without the exit watcher updating status
+        // (e.g., killed externally). We set status to "running" then the health
+        // checker should detect it's dead and mark as "crashed".
+        store.update_app_status("h", "running").unwrap();
 
         let checker = HealthChecker::new(store.clone(), pm);
         checker.check_all().await;

@@ -74,39 +74,6 @@ impl FromStr for Runtime {
     }
 }
 
-/// Distinguishes long-running services from one-shot jobs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AppType {
-    /// Long-running process, auto-restarted on crash.
-    Service,
-    /// Runs to completion, not restarted.
-    Job,
-}
-
-impl fmt::Display for AppType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AppType::Service => write!(f, "service"),
-            AppType::Job => write!(f, "job"),
-        }
-    }
-}
-
-impl FromStr for AppType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "service" => Ok(AppType::Service),
-            "job" => Ok(AppType::Job),
-            other => Err(format!(
-                "unknown app type: '{other}' (expected 'service' or 'job')"
-            )),
-        }
-    }
-}
-
 /// Represents the current state of a deployed app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

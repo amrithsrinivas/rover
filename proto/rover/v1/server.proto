@@ -22,7 +22,7 @@ message AppSummary {
   string app_id = 1;
   string name = 2;
   Runtime runtime = 3;
-  AppType app_type = 4;
+  reserved 4;
   AppStatus status = 5;
   Timestamp created_at = 6;
   Timestamp updated_at = 7;

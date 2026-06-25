@@ -13,13 +13,6 @@ pub struct ProcessManager {
 
 struct ProcessHandle {
     pid: u32,
-    restart_count: u32,
-    /// true if this process should be restarted on crash
-    is_service: bool,
-    run_program: String,
-    run_args: Vec<String>,
-    working_dir: std::path::PathBuf,
-    env_vars: HashMap<String, String>,
 }
 
 impl Clone for ProcessManager {
@@ -47,7 +40,6 @@ impl ProcessManager {
         args: &[String],
         env_vars: &HashMap<String, String>,
         working_dir: &Path,
-        app_type: &str,
     ) -> anyhow::Result<u32> {
         self.stop(app_id).await.ok();
 
@@ -77,56 +69,25 @@ impl ProcessManager {
             self.store.clone(),
         ));
 
-        let is_service = app_type == "service";
-
         // Watch for exit in a spawned task
         let app_id_exit = app_id.to_string();
         let store_exit = self.store.clone();
         let processes_exit = self.processes.clone();
-        let restart = RestartParams {
-            run_program: program.to_string(),
-            run_args: args.to_vec(),
-            env_vars: env_vars.clone(),
-            working_dir: working_dir.to_path_buf(),
-        };
 
         tokio::spawn(async move {
             let status = child.wait().await.ok();
             let exit_ok = status.map_or(false, |s| s.success());
 
-            let handle = processes_exit.lock().unwrap().remove(&app_id_exit);
-            if handle.is_none() {
-                return;
-            }
+            processes_exit.lock().unwrap().remove(&app_id_exit);
 
-            if is_service && !exit_ok {
-                let rc = handle.unwrap().restart_count + 1;
-                if rc > 5 {
-                    let _ = store_exit.update_app_status(&app_id_exit, "crashed");
-                    return;
-                }
-                let delay = 2u64.pow(rc).min(60);
-                tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
-
-                restart_loop(app_id_exit, restart, store_exit, processes_exit, rc).await;
-            } else if !is_service {
-                let status = if exit_ok { "stopped" } else { "failed" };
-                let _ = store_exit.update_app_status(&app_id_exit, status);
-            }
+            let new_status = if exit_ok { "stopped" } else { "failed" };
+            let _ = store_exit.update_app_status(&app_id_exit, new_status);
         });
 
-        self.processes.lock().unwrap().insert(
-            app_id.to_string(),
-            ProcessHandle {
-                pid,
-                restart_count: 0,
-                is_service,
-                run_program: program.to_string(),
-                run_args: args.to_vec(),
-                working_dir: working_dir.to_path_buf(),
-                env_vars: env_vars.clone(),
-            },
-        );
+        self.processes
+            .lock()
+            .unwrap()
+            .insert(app_id.to_string(), ProcessHandle { pid });
         self.store.update_app_pid(&app_id, pid)?;
 
         Ok(pid)
@@ -168,79 +129,8 @@ impl ProcessManager {
     }
 }
 
-// ----------------------------------------------------------------------
-// Restart (free async function, not on ProcessManager)
-// ----------------------------------------------------------------------
-
-struct RestartParams {
-    run_program: String,
-    run_args: Vec<String>,
-    env_vars: HashMap<String, String>,
-    working_dir: std::path::PathBuf,
-}
-
-/// Spawns a new child, watches it, and restarts on crash (loop until success or crash limit).
-async fn restart_loop(
-    app_id: String,
-    params: RestartParams,
-    store: Arc<StateStore>,
-    processes: Arc<Mutex<HashMap<String, ProcessHandle>>>,
-    restart_count: u32,
-) {
-    let mut cmd = tokio::process::Command::new(&params.run_program);
-    cmd.args(&params.run_args)
-        .current_dir(&params.working_dir)
-        .envs(&params.env_vars)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
-
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!(app_id = %app_id, error = %e, "restart spawn failed");
-            let _ = store.update_app_status(&app_id, "crashed");
-            return;
-        }
-    };
-
-    let pid = child.id().expect("child should have a PID");
-    store.update_app_pid(&app_id, pid).ok();
-
-    let (stdout, stderr) = (child.stdout.take(), child.stderr.take());
-    tokio::spawn(pipe_to_logs(app_id.clone(), stdout, false, store.clone()));
-    tokio::spawn(pipe_to_logs(app_id.clone(), stderr, true, store.clone()));
-
-    processes.lock().unwrap().insert(
-        app_id.clone(),
-        ProcessHandle {
-            pid,
-            restart_count,
-            is_service: true,
-            run_program: params.run_program.clone(),
-            run_args: params.run_args.clone(),
-            working_dir: params.working_dir.clone(),
-            env_vars: params.env_vars.clone(),
-        },
-    );
-
-    // Wait for exit and decide whether to restart again
-    let status = child.wait().await.ok();
-    let exit_ok = status.map_or(false, |s| s.success());
-
-    processes.lock().unwrap().remove(&app_id);
-
-    if !exit_ok {
-        let rc = restart_count + 1;
-        if rc > 5 {
-            let _ = store.update_app_status(&app_id, "crashed");
-            return;
-        }
-        let delay = 2u64.pow(rc).min(60);
-        tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
-        Box::pin(restart_loop(app_id, params, store, processes, rc)).await;
-    }
-}
+// ---- ProcessHandle helpers (unused after restart removal, kept for future) ----
+// ---- Restart functionality removed — processes exit once and don't restart ----
 
 // ----------------------------------------------------------------------
 // Helpers
@@ -330,14 +220,7 @@ mod tests {
             .unwrap();
         let pm = ProcessManager::new(store);
         let pid = pm
-            .spawn(
-                "t",
-                "sleep",
-                &["10".into()],
-                &HashMap::new(),
-                dir.path(),
-                "service",
-            )
+            .spawn("t", "sleep", &["10".into()], &HashMap::new(), dir.path())
             .await
             .unwrap();
         assert!(pid > 0);
@@ -355,16 +238,9 @@ mod tests {
             .insert_app("j", "j", "python", "job", "running", "b", "r", "/j", "m")
             .unwrap();
         let pm = ProcessManager::new(store);
-        pm.spawn(
-            "j",
-            "echo",
-            &["hi".into()],
-            &HashMap::new(),
-            dir.path(),
-            "job",
-        )
-        .await
-        .unwrap();
+        pm.spawn("j", "echo", &["hi".into()], &HashMap::new(), dir.path())
+            .await
+            .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         assert!(!pm.is_alive("j"));
     }

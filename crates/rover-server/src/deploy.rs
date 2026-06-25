@@ -63,14 +63,12 @@ impl Deployer {
         let (tx, rx) = mpsc::channel(128);
 
         manifest.validate()?;
-        let runtime = manifest.runtime()?;
-        let app_type_str = manifest.app_type()?;
+        let _runtime = manifest.runtime()?;
         let app_id = uuid::Uuid::new_v4().to_string();
         let app_name = manifest.app.name.clone();
         let build_cmd = manifest.build.command.clone();
         let run_cmd = manifest.run.command.clone();
         let runtime_str = manifest.app.runtime.clone();
-        let app_type = manifest.app.app_type.clone();
         let env_vars = manifest.env.clone();
         let manifest_toml = toml::to_string(manifest)?;
 
@@ -79,14 +77,12 @@ impl Deployer {
         let pm = self.process_manager.clone();
         let registry = self.registry.clone();
 
-        // Spawn the full deploy as a background task so the channel doesn't block
         tokio::spawn(async move {
             if let Err(e) = run_deploy(
                 tx.clone(),
                 &app_id,
                 &app_name,
                 &runtime_str,
-                &app_type,
                 &build_cmd,
                 &run_cmd,
                 &env_vars,
@@ -115,7 +111,6 @@ async fn run_deploy(
     app_id: &str,
     app_name: &str,
     runtime_str: &str,
-    app_type: &str,
     build_cmd: &str,
     run_cmd: &str,
     env_vars: &std::collections::HashMap<String, String>,
@@ -178,7 +173,7 @@ async fn run_deploy(
         app_id,
         app_name,
         runtime_str,
-        app_type,
+        "service",
         "deploying",
         build_cmd,
         run_cmd,
@@ -229,7 +224,7 @@ async fn run_deploy(
     store.update_app_status(app_id, "starting")?;
 
     let (program, args) = crate::process::parse_shell_command(run_cmd);
-    pm.spawn(app_id, &program, &args, env_vars, &source_dir, app_type)
+    pm.spawn(app_id, &program, &args, env_vars, &source_dir)
         .await?;
     store.update_app_status(app_id, "running")?;
     tracing::info!(app_id=%app_id, "app started successfully");
