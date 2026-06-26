@@ -165,7 +165,7 @@ impl ServerService for RoverServer {
         &self,
         _request: Request<v1::GetMetricsRequest>,
     ) -> Result<Response<v1::ServerMetrics>, Status> {
-        Ok(Response::new(collect_metrics()))
+        Ok(Response::new(collect_metrics().await))
     }
 
     type StreamMetricsStream =
@@ -181,7 +181,7 @@ impl ServerService for RoverServer {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
             loop {
                 interval.tick().await;
-                if tx.send(Ok(collect_metrics())).await.is_err() {
+                if tx.send(Ok(collect_metrics().await)).await.is_err() {
                     break; // client disconnected
                 }
             }
