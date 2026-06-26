@@ -77,7 +77,7 @@ fn deploy_button() -> Element<'static, Message> {
 }
 
 fn metrics_cards(d: &crate::state::DeviceState) -> Element<'_, Message> {
-    let (cpu_text, ram_text) = match &d.metrics {
+    let (cpu_text, ram_text, disk_text) = match &d.metrics {
         Some(m) => {
             let cpu = format!("{:.1}%", m.cpu_percent);
             let ram = format!(
@@ -85,17 +85,29 @@ fn metrics_cards(d: &crate::state::DeviceState) -> Element<'_, Message> {
                 format_bytes(m.ram_used_bytes),
                 format_bytes(m.ram_total_bytes)
             );
-            (cpu, ram)
+            let disk = format!(
+                "{} / {}",
+                format_bytes(m.disk_used_bytes),
+                format_bytes(m.disk_total_bytes)
+            );
+            (cpu, ram, disk)
         }
-        None => ("--".to_string(), "--".to_string()),
+        None => ("--".to_string(), "--".to_string(), "--".to_string()),
     };
 
     let cpu_card = metric_card("CPU", cpu_text, colors::ACCENT);
     let ram_card = metric_card("RAM", ram_text, colors::SUCCESS);
+    let disk_card = metric_card("Disk", disk_text, colors::WARNING);
 
-    row![cpu_card, Space::with_width(12), ram_card]
-        .width(Length::Fill)
-        .into()
+    row![
+        cpu_card,
+        Space::with_width(12),
+        ram_card,
+        Space::with_width(12),
+        disk_card
+    ]
+    .width(Length::Fill)
+    .into()
 }
 
 fn metric_card<'a>(label: &'static str, value: String, color: Color) -> Element<'a, Message> {

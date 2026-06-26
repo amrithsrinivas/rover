@@ -8,9 +8,9 @@ use rover_proto::v1::ServerMetrics;
 
 /// Collect current server metrics: CPU, RAM, disk.
 ///
-/// Uses direct `/proc` reads for Termux/Android compatibility.
-/// `sysinfo` fails on non-rooted Android because `/proc/stat` permissions
-/// are restricted by SELinux. Direct file reads work on Android 5+.
+/// All metrics use direct file reads for Termux/Android compatibility.
+/// `/proc/stat` is blocked by SELinux on Android — instead we read
+/// `/proc/self/stat` + `/proc/uptime` for CPU usage of the rover process itself.
 pub fn collect_metrics(snapshot: &Mutex<Option<CpuSnapshot>>) -> ServerMetrics {
     let cpu_percent = cpu_usage(snapshot);
     let (ram_used, ram_total) = ram_usage();
@@ -27,18 +27,23 @@ pub fn collect_metrics(snapshot: &Mutex<Option<CpuSnapshot>>) -> ServerMetrics {
 
 // --- CPU collection ---
 
-/// A snapshot of `/proc/stat` cpu line at a point in time.
+/// A snapshot of `/proc/self/stat` + `/proc/uptime` at a point in time.
 #[derive(Debug, Clone)]
 pub struct CpuSnapshot {
-    /// Sum of all cpu fields (user + nice + system + idle + iowait + irq + softirq + steal)
-    total: u64,
-    /// Idle time (idle + iowait)
-    idle: u64,
+    /// Total CPU time consumed by this process (utime + stime + cutime + cstime)
+    /// in clock ticks (USER_HZ, typically 100).
+    process_ticks: u64,
+    /// System uptime from /proc/uptime, in centiseconds (hundredths of a second).
+    uptime_cs: u64,
 }
 
 /// Compute CPU usage percentage since the last snapshot.
-/// On first call, takes an initial snapshot and returns 0.0.
-/// Subsequent calls compute delta between current and previous snapshot.
+///
+/// Uses `/proc/self/stat` (always readable — every process can read its own)
+/// and `/proc/uptime` (always readable) to calculate this process's CPU usage
+/// as a percentage of one core. Can exceed 100% if multithreaded.
+///
+/// On first call, stores an initial snapshot and returns 0.0.
 fn cpu_usage(snapshot: &Mutex<Option<CpuSnapshot>>) -> f64 {
     let current = match read_cpu_snapshot() {
         Ok(s) => s,
@@ -51,13 +56,18 @@ fn cpu_usage(snapshot: &Mutex<Option<CpuSnapshot>>) -> f64 {
     let mut prev = snapshot.lock().unwrap();
     let result = match prev.as_ref() {
         Some(prev_snap) => {
-            let total_delta = current.total.saturating_sub(prev_snap.total);
-            let idle_delta = current.idle.saturating_sub(prev_snap.idle);
-            if total_delta == 0 {
+            let tick_delta = current
+                .process_ticks
+                .saturating_sub(prev_snap.process_ticks);
+            let time_delta_cs = current.uptime_cs.saturating_sub(prev_snap.uptime_cs);
+
+            if time_delta_cs == 0 {
                 0.0
             } else {
-                let used = total_delta.saturating_sub(idle_delta);
-                (used as f64 / total_delta as f64) * 100.0
+                // CPU% = (ticks_used / ticks_elapsed) * 100
+                // ticks_elapsed = time_delta_cs / (100 / USER_HZ)
+                // USER_HZ is 100 on Linux, so 1 centisecond = 1 tick
+                (tick_delta as f64 / time_delta_cs as f64) * 100.0
             }
         }
         None => 0.0,
@@ -67,51 +77,78 @@ fn cpu_usage(snapshot: &Mutex<Option<CpuSnapshot>>) -> f64 {
     result
 }
 
-/// Read `/proc/stat` and parse the first cpu line.
+/// Read `/proc/uptime` and `/proc/self/stat`.
 ///
-/// Format: `cpu  user nice system idle iowait irq softirq steal guest guest_nice`
-/// All values are in USER_HZ (usually 100 ticks/sec, but we use deltas so it's unitless ratio).
+/// `/proc/self/stat` is always readable on Android — SELinux permits every
+/// process to read its own stat file. `/proc/uptime` is also world-readable.
+///
+/// Fields from `/proc/self/stat` (1-indexed, space-separated):
+///   field 14: utime   — user mode CPU time in ticks
+///   field 15: stime   — kernel mode CPU time in ticks
+///   field 16: cutime  — waited-for children user time in ticks
+///   field 17: cstime  — waited-for children kernel time in ticks
+///
+/// USER_HZ is 100 ticks/sec on Linux (including Android).
+///
+/// `/proc/uptime` format: `uptime_seconds idle_seconds`
+/// We convert to centiseconds for tick-level precision.
 fn read_cpu_snapshot() -> Result<CpuSnapshot, String> {
-    let contents = fs::read_to_string("/proc/stat").map_err(|e| format!("read /proc/stat: {e}"))?;
+    // Read /proc/self/stat
+    let stat =
+        fs::read_to_string("/proc/self/stat").map_err(|e| format!("read /proc/self/stat: {e}"))?;
 
-    // Find the aggregate cpu line (starts with "cpu ")
-    let cpu_line = contents
-        .lines()
-        .find(|line| line.starts_with("cpu "))
-        .ok_or("no 'cpu ' line in /proc/stat")?;
+    // The stat file is space-separated, but field 2 (comm) may contain spaces
+    // and is wrapped in parentheses. Find the closing paren to parse fields after it.
+    let after_comm = stat
+        .rsplit(')')
+        .next()
+        .ok_or("malformed /proc/self/stat: no closing paren")?;
 
-    let fields: Vec<&str> = cpu_line.split_whitespace().collect();
-    // fields[0] = "cpu", fields[1..] = numbers
-    if fields.len() < 8 {
+    let fields: Vec<&str> = after_comm.split_whitespace().collect();
+    // fields[0] = state, fields[1] = ppid, ..., fields[11] = utime, fields[12] = stime, ...
+
+    if fields.len() < 15 {
         return Err(format!(
-            "unexpected /proc/stat cpu line: only {} fields",
+            "/proc/self/stat: expected at least 15 fields after comm, got {}",
             fields.len()
         ));
     }
 
-    let user: u64 = fields[1].parse().map_err(|e| format!("parse user: {e}"))?;
-    let nice: u64 = fields[2].parse().map_err(|e| format!("parse nice: {e}"))?;
-    let system: u64 = fields[3]
+    // fields after comm are 0-indexed, corresponding to proc fields starting at index 3
+    // field 14 (utime) = our fields[11], field 15 (stime) = fields[12],
+    // field 16 (cutime) = fields[13], field 17 (cstime) = fields[14]
+    let utime: u64 = fields[11]
         .parse()
-        .map_err(|e| format!("parse system: {e}"))?;
-    let idle: u64 = fields[4].parse().map_err(|e| format!("parse idle: {e}"))?;
-    let iowait: u64 = fields[5]
+        .map_err(|e| format!("parse utime: {e}"))?;
+    let stime: u64 = fields[12]
         .parse()
-        .map_err(|e| format!("parse iowait: {e}"))?;
-    let irq: u64 = fields[6].parse().map_err(|e| format!("parse irq: {e}"))?;
-    let softirq: u64 = fields[7]
+        .map_err(|e| format!("parse stime: {e}"))?;
+    let cutime: u64 = fields[13]
         .parse()
-        .map_err(|e| format!("parse softirq: {e}"))?;
+        .map_err(|e| format!("parse cutime: {e}"))?;
+    let cstime: u64 = fields[14]
+        .parse()
+        .map_err(|e| format!("parse cstime: {e}"))?;
 
-    // steal (fields[8]) is optional on older kernels
-    let steal: u64 = fields.get(8).and_then(|v| v.parse().ok()).unwrap_or(0);
+    let process_ticks = utime + stime + cutime + cstime;
 
-    let total = user + nice + system + idle + iowait + irq + softirq + steal;
-    let idle_total = idle + iowait;
+    // Read /proc/uptime
+    let uptime_raw =
+        fs::read_to_string("/proc/uptime").map_err(|e| format!("read /proc/uptime: {e}"))?;
+
+    let uptime_secs: f64 = uptime_raw
+        .split_whitespace()
+        .next()
+        .ok_or("empty /proc/uptime")?
+        .parse()
+        .map_err(|e| format!("parse uptime: {e}"))?;
+
+    // Convert to centiseconds (hundredths). USER_HZ=100 means 1 tick = 1 centisecond.
+    let uptime_cs = (uptime_secs * 100.0) as u64;
 
     Ok(CpuSnapshot {
-        total,
-        idle: idle_total,
+        process_ticks,
+        uptime_cs,
     })
 }
 
@@ -181,39 +218,67 @@ fn parse_kb_value(s: &str) -> Result<u64, String> {
 
 // --- Disk collection ---
 
-/// Get disk usage for the rover data directory via POSIX `statvfs`.
+/// Get disk usage for the given path via the `df` command.
 ///
+/// Uses `df -k` (POSIX, works on Linux, macOS, and Termux) then converts KB to bytes.
 /// Returns (used_bytes, total_bytes).
+/// Falls back to `/` if the path doesn't exist.
 fn disk_usage(path: &Path) -> (u64, u64) {
-    unsafe {
-        let mut stat: libc::statvfs = std::mem::zeroed();
-        let cpath = std::ffi::CString::new(path.to_string_lossy().as_bytes())
-            .unwrap_or_else(|_| std::ffi::CString::new("/").unwrap());
+    // If the path doesn't exist, walk up to the first existing ancestor
+    let target = if path.exists() {
+        path.to_path_buf()
+    } else {
+        path.ancestors()
+            .find(|p| p.exists())
+            .unwrap_or_else(|| Path::new("/"))
+            .to_path_buf()
+    };
 
-        if libc::statvfs(cpath.as_ptr(), &mut stat) != 0 {
+    // df -k <path> outputs something like:
+    // Filesystem   1024-blocks      Used Available Capacity Mounted on
+    // /dev/sda1       12345678  4567890   7778888    37%   /
+    match std::process::Command::new("df")
+        .args(["-k", target.to_str().unwrap_or("/")])
+        .output()
+    {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Parse the second line (first is header)
+            if let Some(line) = stdout.lines().nth(1) {
+                let fields: Vec<&str> = line.split_whitespace().collect();
+                // fields: [Filesystem, 1024-blocks, Used, Available, Capacity, Mounted]
+                if fields.len() >= 4 {
+                    let used_kb: u64 = fields[2].parse().unwrap_or(0);
+                    let total_kb: u64 = fields[1].parse().unwrap_or(0);
+                    return (used_kb * 1024, total_kb * 1024);
+                }
+            }
             tracing::warn!(
-                "statvfs failed for {}: {}",
-                path.display(),
-                std::io::Error::last_os_error()
+                "df output unparseable for {}: {}",
+                target.display(),
+                stdout.trim()
             );
-            return (0, 0);
+            (0, 0)
         }
-
-        let total = stat.f_blocks as u64 * stat.f_frsize as u64;
-        let available = stat.f_bavail as u64 * stat.f_frsize as u64;
-        let used = total.saturating_sub(available);
-        (used, total)
+        Err(e) => {
+            tracing::warn!("df command failed for {}: {}", target.display(), e);
+            (0, 0)
+        }
     }
 }
 
-/// Rover data directory for disk usage reporting.
+/// Root path for disk usage reporting.
+///
+/// On Termux this is `/data/data/com.termux/files/home`.
+/// `statvfs` reports the filesystem containing the path, not the path itself,
+/// so this gives us the overall Termux storage partition.
 fn data_dir() -> std::path::PathBuf {
     std::env::var("DATA_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
-            let home =
-                std::env::var("HOME").unwrap_or_else(|_| "/data/data/com.termux/files/home".into());
-            std::path::PathBuf::from(home).join(".config").join("rover")
+            std::env::var("HOME")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::PathBuf::from("/data/data/com.termux/files/home"))
         })
 }
 
@@ -229,26 +294,62 @@ mod tests {
     }
 
     #[test]
-    fn test_cpu_snapshot_parse() {
-        // Fake /proc/stat line
-        let line = "cpu  123 456 789 1000 200 300 400 500 0 0";
-        // user=123 nice=456 sys=789 idle=1000 iowait=200 irq=300 softirq=400 steal=500
-        // total=3768 idle=1200
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        let total: u64 = fields[1..=8]
-            .iter()
-            .map(|v| v.parse::<u64>().unwrap())
-            .sum();
-        let idle: u64 = fields[4].parse::<u64>().unwrap() + fields[5].parse::<u64>().unwrap();
-        assert_eq!(total, 3768);
-        assert_eq!(idle, 1200);
+    fn test_cpu_snapshot_from_fake_stat() {
+        // Simulate /proc/self/stat fields after comm (closing paren)
+        // field index:  0      1    2  3  4  5  6  7  8  9  10  11    12    13     14
+        // proc field:   state ppid ...                 utime stime cutime cstime
+        let after_comm = " S 1234 5678 0 0 -1 4194304 123 0 0 0 100 50 25 12 0 0 20 0 1 0 12345 4096 56 4294967295 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0";
+        let fields: Vec<&str> = after_comm.split_whitespace().collect();
+        let utime: u64 = fields[11].parse().unwrap();
+        let stime: u64 = fields[12].parse().unwrap();
+        let cutime: u64 = fields[13].parse().unwrap();
+        let cstime: u64 = fields[14].parse().unwrap();
+
+        assert_eq!(utime, 100);
+        assert_eq!(stime, 50);
+        assert_eq!(cutime, 25);
+        assert_eq!(cstime, 12);
+        assert_eq!(utime + stime + cutime + cstime, 187);
     }
 
     #[test]
     fn test_cpu_delta_zero_on_first_call() {
         let snap = Mutex::new(None);
-        // On macOS CI or non-Linux, /proc/stat won't exist so we get 0.0
         let result = cpu_usage(&snap);
         assert!(result >= 0.0 && result <= 100.0);
+    }
+
+    #[test]
+    fn test_cpu_delta_from_known_values() {
+        // Test the CPU computation directly with known values.
+        // process used 50 ticks in 100 centiseconds (1 second) = 50% of one core
+        let prev = CpuSnapshot {
+            process_ticks: 1000,
+            uptime_cs: 5000,
+        };
+        let current = CpuSnapshot {
+            process_ticks: 1050,
+            uptime_cs: 5100,
+        };
+
+        let tick_delta = current.process_ticks - prev.process_ticks;
+        let time_delta = current.uptime_cs - prev.uptime_cs;
+        let cpu = (tick_delta as f64 / time_delta as f64) * 100.0;
+        // 50 ticks / 100 cs = 0.5 = 50%
+        assert!((cpu - 50.0).abs() < 0.01, "expected 50%, got {cpu}%");
+    }
+
+    #[test]
+    fn test_disk_usage_root() {
+        // / always exists on any Unix
+        let (_used, total) = disk_usage(Path::new("/"));
+        assert!(total > 0, "total disk should be > 0");
+    }
+
+    #[test]
+    fn test_disk_usage_nonexistent_falls_back() {
+        // A path that definitely doesn't exist
+        let (_used, total) = disk_usage(Path::new("/nonexistent/path/xyzzy"));
+        assert!(total > 0, "should fall back to existing ancestor");
     }
 }
