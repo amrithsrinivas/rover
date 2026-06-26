@@ -1,6 +1,7 @@
 mod auth;
 mod deploy;
 mod health;
+mod metrics;
 mod process;
 mod runtime;
 mod server;

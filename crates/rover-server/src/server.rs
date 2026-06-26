@@ -1,8 +1,7 @@
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
-use tokio_stream::wrappers::ReceiverStream;
 use tonic::service::Interceptor;
 use tonic::{Request, Response, Status, Streaming};
 
@@ -15,6 +14,7 @@ use rover_proto::v1::{
 
 use crate::auth::AuthManager;
 use crate::deploy::Deployer;
+use crate::metrics::{CpuSnapshot, collect_metrics};
 use crate::process::ProcessManager;
 use crate::state::{AppRow, StateStore};
 use rover_core::AppManifest;
@@ -30,6 +30,8 @@ pub struct RoverServer {
     pub deployer: Arc<Deployer>,
     pub process_manager: ProcessManager,
     pub start_time: std::time::Instant,
+    /// CPU snapshot for computing delta-based CPU usage.
+    pub cpu_snapshot: Arc<Mutex<Option<CpuSnapshot>>>,
 }
 
 // ----------------------------------------------------------------------
@@ -52,6 +54,7 @@ pub async fn start(
         deployer: Arc::new(deployer),
         process_manager,
         start_time: std::time::Instant::now(),
+        cpu_snapshot: Arc::new(Mutex::new(None)),
     };
 
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
@@ -165,7 +168,7 @@ impl ServerService for RoverServer {
         &self,
         _request: Request<v1::GetMetricsRequest>,
     ) -> Result<Response<v1::ServerMetrics>, Status> {
-        Ok(Response::new(collect_metrics()))
+        Ok(Response::new(collect_metrics(&self.cpu_snapshot)))
     }
 
     type StreamMetricsStream =
@@ -176,12 +179,13 @@ impl ServerService for RoverServer {
         _request: Request<v1::GetMetricsRequest>,
     ) -> Result<Response<Self::StreamMetricsStream>, Status> {
         let (tx, rx) = mpsc::channel(16);
+        let cpu_snapshot = self.cpu_snapshot.clone();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
             loop {
                 interval.tick().await;
-                if tx.send(Ok(collect_metrics())).await.is_err() {
+                if tx.send(Ok(collect_metrics(&cpu_snapshot))).await.is_err() {
                     break; // client disconnected
                 }
             }
@@ -651,26 +655,6 @@ fn status_to_proto(s: &str) -> i32 {
         "crashed" => 5,
         "failed" => 6,
         _ => 0,
-    }
-}
-
-fn collect_metrics() -> v1::ServerMetrics {
-    use sysinfo::System;
-    let mut sys = System::new_all();
-    sys.refresh_all();
-
-    let cpu = sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() as f64
-        / sys.cpus().len().max(1) as f64;
-    let ram_used = sys.used_memory();
-    let ram_total = sys.total_memory();
-    // Skip disk for simplicity (can add later)
-
-    v1::ServerMetrics {
-        cpu_percent: cpu,
-        ram_used_bytes: ram_used,
-        ram_total_bytes: ram_total,
-        disk_used_bytes: 0,
-        disk_total_bytes: 0,
     }
 }
 

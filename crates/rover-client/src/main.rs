@@ -1082,8 +1082,7 @@ async fn package_source(path: &str) -> Result<Vec<u8>, String> {
 
             // Check if should skip
             let first_component = name.as_ref();
-            let should_skip =
-                ignore_patterns.contains(&first_component) || name.starts_with('.');
+            let should_skip = ignore_patterns.contains(&first_component) || name.starts_with('.');
             if should_skip {
                 continue;
             }
