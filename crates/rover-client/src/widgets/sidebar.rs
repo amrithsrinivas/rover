@@ -67,8 +67,13 @@ fn device_row<'a>(app: &'a RoverApp, i: usize, d: &'a DeviceState) -> Element<'a
     ]
     .spacing(2);
 
-    let row_content = row![dot, label]
-        .spacing(10)
+    // Delete button (only show on hover or for disconnected devices)
+    let delete_btn = button(text("✕").size(10).color(colors::DANGER))
+        .style(button::text)
+        .on_press(Message::DeleteDevice(i));
+
+    let row_content = row![dot, label, Space::with_width(Length::Fill), delete_btn]
+        .spacing(8)
         .align_y(Alignment::Center)
         .padding(10);
 

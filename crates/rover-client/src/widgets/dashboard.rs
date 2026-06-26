@@ -33,6 +33,10 @@ pub fn dashboard(app: &RoverApp) -> Element<'_, Message> {
             .color(colors::TEXT)
             .width(Length::Fill),
         deploy_button(),
+        Space::with_width(8),
+        button(text("Disconnect").size(13))
+            .style(button::secondary)
+            .on_press(Message::Disconnect),
     ]
     .align_y(Alignment::Center)
     .spacing(12);

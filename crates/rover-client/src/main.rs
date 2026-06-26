@@ -60,6 +60,7 @@ pub struct RoverApp {
     pub deploying: bool,
     pub deploy_log: Vec<String>,
     pub confirm_delete: Option<(String, String)>,
+    pub confirm_device_delete: Option<usize>,
     pub env_key: String,
     pub env_value: String,
     pub toasts: Vec<String>,
@@ -138,6 +139,7 @@ fn init() -> (RoverApp, Task<Message>) {
         deploying: false,
         deploy_log: Vec::new(),
         confirm_delete: None,
+        confirm_device_delete: None,
         env_key: String::new(),
         env_value: String::new(),
         toasts: Vec::new(),
@@ -297,7 +299,57 @@ fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
                 d.err = Some(err.clone());
             }
             if app.active == idx {
-                app.toasts.push(format!("Connection error: {err}"));
+                app.toasts = vec![format!("Connection error: {err}")];
+            }
+            Task::none()
+        }
+
+        Message::Disconnect => {
+            if let Some(d) = app.devices.get_mut(app.active) {
+                d.connected = false;
+                d.client = None;
+                d.info = None;
+                d.metrics = None;
+                d.apps.clear();
+                d.err = None;
+            }
+            app.selected_app = None;
+            app.app_detail = None;
+            app.log_entries.clear();
+            Task::none()
+        }
+
+        Message::DeleteDevice(idx) => {
+            if app.devices.get(idx).is_some() {
+                app.confirm_device_delete = Some(idx);
+            }
+            Task::none()
+        }
+
+        Message::CancelDeleteDevice => {
+            app.confirm_device_delete = None;
+            Task::none()
+        }
+
+        Message::ConfirmDeleteDevice(idx) => {
+            app.confirm_device_delete = None;
+            if idx < app.devices.len() {
+                let profile_id = app.devices[idx].profile.id.clone();
+                // Delete from disk
+                if let Ok(mut store) = ConnectionProfileStore::load_from_disk() {
+                    store.remove(&profile_id);
+                    let _ = store.save_to_disk();
+                }
+                // Remove from device list
+                app.devices.remove(idx);
+                // Adjust active index
+                if app.devices.is_empty() {
+                    app.active = 0;
+                    app.selected_app = None;
+                    app.app_detail = None;
+                } else if app.active >= app.devices.len() {
+                    app.active = app.devices.len() - 1;
+                }
             }
             Task::none()
         }
@@ -593,7 +645,9 @@ fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
 
         // --- Toasts ---
         Message::Toast(msg) => {
-            app.toasts.push(msg);
+            // Keep only the most recent error — disconnection storms
+            // would otherwise flood the UI with duplicate toasts.
+            app.toasts = vec![msg];
             Task::none()
         }
         Message::Dismiss(i) => {
@@ -696,9 +750,67 @@ fn view(app: &RoverApp) -> Element<'_, Message> {
         body.into()
     };
 
+    // Device delete confirmation overlay
+    let body_with_delete = if let Some(idx) = app.confirm_device_delete {
+        if let Some(d) = app.devices.get(idx) {
+            let name = d.profile.name.clone();
+            let modal = container(
+                column![
+                    text(format!("Remove {name}?"))
+                        .size(16)
+                        .color(theme::colors::TEXT),
+                    Space::with_height(8),
+                    text("Saved API key will be deleted.")
+                        .size(13)
+                        .color(theme::colors::TEXT_MUTED),
+                    Space::with_height(16),
+                    row![
+                        button(text("Cancel").size(13))
+                            .style(iced::widget::button::secondary)
+                            .on_press(Message::CancelDeleteDevice),
+                        Space::with_width(8),
+                        button(text("Remove").size(13))
+                            .style(iced::widget::button::danger)
+                            .on_press(Message::ConfirmDeleteDevice(idx)),
+                    ]
+                    .spacing(0),
+                ]
+                .padding(24),
+            )
+            .style(|_theme| container::Style {
+                background: Some(iced::Background::Color(theme::colors::ELEVATED)),
+                border: iced::Border {
+                    color: theme::colors::BORDER,
+                    width: 1.0,
+                    radius: 12.0.into(),
+                },
+                ..container::Style::default()
+            });
+
+            stack([
+                body_with_modal,
+                container(modal.center_x(Length::Fill).center_y(Length::Fill))
+                    .style(|_theme| container::Style {
+                        background: Some(iced::Background::Color(iced::Color::from_rgba(
+                            0.0, 0.0, 0.0, 0.6,
+                        ))),
+                        ..container::Style::default()
+                    })
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into(),
+            ])
+            .into()
+        } else {
+            body_with_modal
+        }
+    } else {
+        body_with_modal
+    };
+
     // Toast overlay
     if app.toasts.is_empty() {
-        body_with_modal
+        body_with_delete
     } else {
         let toasts: Vec<Element<Message>> = app
             .toasts
@@ -732,7 +844,7 @@ fn view(app: &RoverApp) -> Element<'_, Message> {
             .collect();
 
         stack([
-            body_with_modal,
+            body_with_delete,
             container(column(toasts).spacing(6).padding(12))
                 .width(Length::Fill)
                 .into(),

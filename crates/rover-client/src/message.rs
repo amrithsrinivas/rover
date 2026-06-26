@@ -35,6 +35,14 @@ pub enum Message {
     DevConnected(usize, Option<ClientRef>),
     /// Existing device connection error: (index, error).
     DevError(usize, String),
+    /// Disconnect from the active device.
+    Disconnect,
+    /// Show delete confirmation for a device profile.
+    DeleteDevice(usize),
+    /// Dismiss device delete confirmation.
+    CancelDeleteDevice,
+    /// Execute device deletion: index.
+    ConfirmDeleteDevice(usize),
 
     // --- Data refresh ---
     /// Refresh result: (info, metrics).
