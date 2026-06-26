@@ -409,6 +409,10 @@ impl AppService for RoverServer {
         self.store
             .delete_app(&app_id)
             .map_err(|e| Status::internal(e.to_string()))?;
+        // Clean up on-disk source files
+        if let Err(e) = self.deployer.cleanup_app_dir(&app_id) {
+            tracing::warn!(app_id=%app_id, error=%e, "failed to clean up app directory");
+        }
         Ok(Response::new(v1::Empty {}))
     }
 

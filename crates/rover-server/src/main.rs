@@ -84,6 +84,11 @@ async fn main() -> anyhow::Result<()> {
         data_dir.clone(),
     );
 
+    // Clean up orphaned app directories (deleted from DB but still on disk)
+    if let Err(e) = deployer.cleanup_orphan_dirs() {
+        tracing::warn!("failed to clean up orphan app directories: {e}");
+    }
+
     // Start health check loop (background)
     let health_checker = health::HealthChecker::new(store.clone(), process_manager.clone());
     tokio::spawn(async move {

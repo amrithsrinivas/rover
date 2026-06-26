@@ -104,6 +104,59 @@ impl Deployer {
 
         Ok(rx)
     }
+
+    /// Remove the on-disk app directory for a deleted app.
+    ///
+    /// This removes `{data_dir}/apps/{app_id}/` and all its contents.
+    /// Does nothing if the directory doesn't exist.
+    pub fn cleanup_app_dir(&self, app_id: &str) -> anyhow::Result<()> {
+        let app_dir = self.data_dir.join("apps").join(app_id);
+        if app_dir.exists() {
+            std::fs::remove_dir_all(&app_dir)?;
+            tracing::info!(app_id=%app_id, path=%app_dir.display(), "cleaned up app directory");
+        } else {
+            tracing::debug!(app_id=%app_id, "app directory not found, nothing to clean up");
+        }
+        Ok(())
+    }
+
+    /// On startup, scan `{data_dir}/apps/` for directories that have no
+    /// corresponding row in the database, and remove them.
+    pub fn cleanup_orphan_dirs(&self) -> anyhow::Result<()> {
+        let apps_dir = self.data_dir.join("apps");
+        if !apps_dir.exists() {
+            return Ok(());
+        }
+
+        let entries = std::fs::read_dir(&apps_dir)?;
+        for entry in entries {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(e) => {
+                    tracing::warn!("failed to read entry in apps dir: {e}");
+                    continue;
+                }
+            };
+
+            if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+
+            let app_id = entry.file_name().to_string_lossy().to_string();
+            // Check if this app_id exists in the database
+            if self.store.get_app(&app_id).unwrap_or(None).is_none() {
+                tracing::info!(
+                    app_id=%app_id,
+                    "removing orphaned app directory with no DB entry"
+                );
+                if let Err(e) = std::fs::remove_dir_all(entry.path()) {
+                    tracing::warn!(app_id=%app_id, error=%e, "failed to remove orphaned app dir");
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 async fn run_deploy(
@@ -288,4 +341,82 @@ fn extract_tar_gz(data: &[u8], dest: &Path) -> anyhow::Result<()> {
     let mut archive = tar::Archive::new(decoder);
     archive.unpack(dest)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RuntimeRegistry;
+
+    fn make_deployer(tmp: &tempfile::TempDir) -> Deployer {
+        let store = StateStore::open(&tmp.path().join("rover.db")).unwrap();
+        let registry = RuntimeRegistry::new();
+        let pm = ProcessManager::new(store.clone());
+        Deployer::new(store, registry, pm, tmp.path().to_path_buf())
+    }
+
+    #[test]
+    fn test_cleanup_orphan_dirs_removes_orphans() {
+        let tmp = tempfile::tempdir().unwrap();
+        let deployer = make_deployer(&tmp);
+
+        // Create an orphan app directory (dir exists but no DB entry)
+        let orphan_dir = tmp.path().join("apps").join("orphan-app-id");
+        std::fs::create_dir_all(orphan_dir.join("source")).unwrap();
+        // Write a dummy file
+        std::fs::write(orphan_dir.join("source").join("main.py"), "print('hi')").unwrap();
+
+        // Also create an app that IS in the DB (should not be removed)
+        let kept_dir = tmp.path().join("apps").join("kept-app-id");
+        std::fs::create_dir_all(kept_dir.join("source")).unwrap();
+        std::fs::write(kept_dir.join("source").join("main.py"), "print('hi')").unwrap();
+        deployer
+            .store
+            .insert_app(
+                "kept-app-id",
+                "kept",
+                "python",
+                "service",
+                "stopped",
+                "pip install",
+                "python main.py",
+                "/tmp/kept",
+                "",
+            )
+            .unwrap();
+
+        // Run cleanup
+        deployer.cleanup_orphan_dirs().unwrap();
+
+        // Orphan should be gone
+        assert!(!orphan_dir.exists(), "orphan directory should be removed");
+        // Kept app should still exist
+        assert!(kept_dir.exists(), "kept app directory should remain");
+    }
+
+    #[test]
+    fn test_cleanup_app_dir_removes_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let deployer = make_deployer(&tmp);
+
+        // Create an app directory
+        let app_dir = tmp.path().join("apps").join("test-app");
+        std::fs::create_dir_all(app_dir.join("source")).unwrap();
+        std::fs::write(app_dir.join("source").join("main.py"), "print('hi')").unwrap();
+
+        assert!(app_dir.exists());
+
+        deployer.cleanup_app_dir("test-app").unwrap();
+
+        assert!(!app_dir.exists(), "app directory should be removed");
+    }
+
+    #[test]
+    fn test_cleanup_app_dir_nonexistent_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let deployer = make_deployer(&tmp);
+
+        // Should not panic or error for a nonexistent app
+        deployer.cleanup_app_dir("nonexistent-app").unwrap();
+    }
 }
