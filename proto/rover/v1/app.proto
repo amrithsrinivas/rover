@@ -87,7 +87,7 @@ message SetSecretRequest {
 
 message LogStreamRequest {
   string app_id = 1;
-  bool follow = 2;
+  reserved 2;
   int32 tail_lines = 3;
 }
 

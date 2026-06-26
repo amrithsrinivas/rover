@@ -316,12 +316,10 @@ impl RoverClient {
     pub async fn stream_logs(
         &mut self,
         app_id: &str,
-        follow: bool,
         tail_lines: i32,
     ) -> Result<mpsc::Receiver<Result<LogEntry, String>>, String> {
         let mut req = Request::new(LogStreamRequest {
             app_id: app_id.to_string(),
-            follow,
             tail_lines,
         });
         self.auth_req(&mut req)?;

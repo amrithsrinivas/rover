@@ -418,7 +418,6 @@ impl AppService for RoverServer {
         let req = request.into_inner();
         let app_id = req.app_id;
         let tail = req.tail_lines.max(1).min(1000) as i64;
-        let follow = req.follow;
 
         // Send recent log lines first
         let recent = self
@@ -440,40 +439,8 @@ impl AppService for RoverServer {
                 .await;
         }
 
-        if follow {
-            // Poll for new log entries every second
-            let store = self.store.clone();
-            let app_id_clone = app_id.clone();
-            let mut last_ts = chrono::Utc::now().timestamp_millis();
-
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
-                loop {
-                    interval.tick().await;
-                    match store.get_logs_since(&app_id_clone, last_ts) {
-                        Ok(logs) => {
-                            for log in logs {
-                                last_ts = last_ts.max(log.timestamp);
-                                if tx
-                                    .send(Ok(v1::LogEntry {
-                                        timestamp: Some(v1::Timestamp {
-                                            millis: log.timestamp,
-                                        }),
-                                        line: log.line,
-                                        is_stderr: log.is_stderr,
-                                    }))
-                                    .await
-                                    .is_err()
-                                {
-                                    return; // client disconnected
-                                }
-                            }
-                        }
-                        Err(_) => return,
-                    }
-                }
-            });
-        }
+        // Always close after sending — client polls periodically for new lines
+        drop(tx);
 
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(stream)))
