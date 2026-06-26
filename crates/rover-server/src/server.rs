@@ -1,5 +1,5 @@
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tonic::service::Interceptor;
@@ -14,7 +14,7 @@ use rover_proto::v1::{
 
 use crate::auth::AuthManager;
 use crate::deploy::Deployer;
-use crate::metrics::{CpuSnapshot, collect_metrics};
+use crate::metrics::collect_metrics;
 use crate::process::ProcessManager;
 use crate::state::{AppRow, StateStore};
 use rover_core::AppManifest;
@@ -30,8 +30,6 @@ pub struct RoverServer {
     pub deployer: Arc<Deployer>,
     pub process_manager: ProcessManager,
     pub start_time: std::time::Instant,
-    /// CPU snapshot for computing delta-based CPU usage.
-    pub cpu_snapshot: Arc<Mutex<Option<CpuSnapshot>>>,
 }
 
 // ----------------------------------------------------------------------
@@ -54,7 +52,6 @@ pub async fn start(
         deployer: Arc::new(deployer),
         process_manager,
         start_time: std::time::Instant::now(),
-        cpu_snapshot: Arc::new(Mutex::new(None)),
     };
 
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
@@ -168,7 +165,7 @@ impl ServerService for RoverServer {
         &self,
         _request: Request<v1::GetMetricsRequest>,
     ) -> Result<Response<v1::ServerMetrics>, Status> {
-        Ok(Response::new(collect_metrics(&self.cpu_snapshot)))
+        Ok(Response::new(collect_metrics()))
     }
 
     type StreamMetricsStream =
@@ -179,13 +176,12 @@ impl ServerService for RoverServer {
         _request: Request<v1::GetMetricsRequest>,
     ) -> Result<Response<Self::StreamMetricsStream>, Status> {
         let (tx, rx) = mpsc::channel(16);
-        let cpu_snapshot = self.cpu_snapshot.clone();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
             loop {
                 interval.tick().await;
-                if tx.send(Ok(collect_metrics(&cpu_snapshot))).await.is_err() {
+                if tx.send(Ok(collect_metrics())).await.is_err() {
                     break; // client disconnected
                 }
             }

@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::Path;
-use std::sync::Mutex;
 
 use rover_proto::v1::ServerMetrics;
 
@@ -8,11 +7,11 @@ use rover_proto::v1::ServerMetrics;
 
 /// Collect current server metrics: CPU, RAM, disk.
 ///
-/// All metrics use direct file reads for Termux/Android compatibility.
-/// `/proc/stat` is blocked by SELinux on Android — instead we read
-/// `/proc/self/stat` + `/proc/uptime` for CPU usage of the rover process itself.
-pub fn collect_metrics(snapshot: &Mutex<Option<CpuSnapshot>>) -> ServerMetrics {
-    let cpu_percent = cpu_usage(snapshot);
+/// RAM and disk use direct reads for Termux/Android compatibility.
+/// CPU is stubbed at 0.0 — `/proc/stat` and `/proc/uptime` are blocked
+/// by SELinux on non-rooted Android. A working method will be found later.
+pub fn collect_metrics() -> ServerMetrics {
+    let cpu_percent = 0.0;
     let (ram_used, ram_total) = ram_usage();
     let (disk_used, disk_total) = disk_usage(&data_dir());
 
@@ -23,133 +22,6 @@ pub fn collect_metrics(snapshot: &Mutex<Option<CpuSnapshot>>) -> ServerMetrics {
         disk_used_bytes: disk_used,
         disk_total_bytes: disk_total,
     }
-}
-
-// --- CPU collection ---
-
-/// A snapshot of `/proc/self/stat` + `/proc/uptime` at a point in time.
-#[derive(Debug, Clone)]
-pub struct CpuSnapshot {
-    /// Total CPU time consumed by this process (utime + stime + cutime + cstime)
-    /// in clock ticks (USER_HZ, typically 100).
-    process_ticks: u64,
-    /// System uptime from /proc/uptime, in centiseconds (hundredths of a second).
-    uptime_cs: u64,
-}
-
-/// Compute CPU usage percentage since the last snapshot.
-///
-/// Uses `/proc/self/stat` (always readable — every process can read its own)
-/// and `/proc/uptime` (always readable) to calculate this process's CPU usage
-/// as a percentage of one core. Can exceed 100% if multithreaded.
-///
-/// On first call, stores an initial snapshot and returns 0.0.
-fn cpu_usage(snapshot: &Mutex<Option<CpuSnapshot>>) -> f64 {
-    let current = match read_cpu_snapshot() {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::warn!("failed to read CPU stats: {e}");
-            return 0.0;
-        }
-    };
-
-    let mut prev = snapshot.lock().unwrap();
-    let result = match prev.as_ref() {
-        Some(prev_snap) => {
-            let tick_delta = current
-                .process_ticks
-                .saturating_sub(prev_snap.process_ticks);
-            let time_delta_cs = current.uptime_cs.saturating_sub(prev_snap.uptime_cs);
-
-            if time_delta_cs == 0 {
-                0.0
-            } else {
-                // CPU% = (ticks_used / ticks_elapsed) * 100
-                // ticks_elapsed = time_delta_cs / (100 / USER_HZ)
-                // USER_HZ is 100 on Linux, so 1 centisecond = 1 tick
-                (tick_delta as f64 / time_delta_cs as f64) * 100.0
-            }
-        }
-        None => 0.0,
-    };
-
-    *prev = Some(current);
-    result
-}
-
-/// Read `/proc/uptime` and `/proc/self/stat`.
-///
-/// `/proc/self/stat` is always readable on Android — SELinux permits every
-/// process to read its own stat file. `/proc/uptime` is also world-readable.
-///
-/// Fields from `/proc/self/stat` (1-indexed, space-separated):
-///   field 14: utime   — user mode CPU time in ticks
-///   field 15: stime   — kernel mode CPU time in ticks
-///   field 16: cutime  — waited-for children user time in ticks
-///   field 17: cstime  — waited-for children kernel time in ticks
-///
-/// USER_HZ is 100 ticks/sec on Linux (including Android).
-///
-/// `/proc/uptime` format: `uptime_seconds idle_seconds`
-/// We convert to centiseconds for tick-level precision.
-fn read_cpu_snapshot() -> Result<CpuSnapshot, String> {
-    // Read /proc/self/stat
-    let stat =
-        fs::read_to_string("/proc/self/stat").map_err(|e| format!("read /proc/self/stat: {e}"))?;
-
-    // The stat file is space-separated, but field 2 (comm) may contain spaces
-    // and is wrapped in parentheses. Find the closing paren to parse fields after it.
-    let after_comm = stat
-        .rsplit(')')
-        .next()
-        .ok_or("malformed /proc/self/stat: no closing paren")?;
-
-    let fields: Vec<&str> = after_comm.split_whitespace().collect();
-    // fields[0] = state, fields[1] = ppid, ..., fields[11] = utime, fields[12] = stime, ...
-
-    if fields.len() < 15 {
-        return Err(format!(
-            "/proc/self/stat: expected at least 15 fields after comm, got {}",
-            fields.len()
-        ));
-    }
-
-    // fields after comm are 0-indexed, corresponding to proc fields starting at index 3
-    // field 14 (utime) = our fields[11], field 15 (stime) = fields[12],
-    // field 16 (cutime) = fields[13], field 17 (cstime) = fields[14]
-    let utime: u64 = fields[11]
-        .parse()
-        .map_err(|e| format!("parse utime: {e}"))?;
-    let stime: u64 = fields[12]
-        .parse()
-        .map_err(|e| format!("parse stime: {e}"))?;
-    let cutime: u64 = fields[13]
-        .parse()
-        .map_err(|e| format!("parse cutime: {e}"))?;
-    let cstime: u64 = fields[14]
-        .parse()
-        .map_err(|e| format!("parse cstime: {e}"))?;
-
-    let process_ticks = utime + stime + cutime + cstime;
-
-    // Read /proc/uptime
-    let uptime_raw =
-        fs::read_to_string("/proc/uptime").map_err(|e| format!("read /proc/uptime: {e}"))?;
-
-    let uptime_secs: f64 = uptime_raw
-        .split_whitespace()
-        .next()
-        .ok_or("empty /proc/uptime")?
-        .parse()
-        .map_err(|e| format!("parse uptime: {e}"))?;
-
-    // Convert to centiseconds (hundredths). USER_HZ=100 means 1 tick = 1 centisecond.
-    let uptime_cs = (uptime_secs * 100.0) as u64;
-
-    Ok(CpuSnapshot {
-        process_ticks,
-        uptime_cs,
-    })
 }
 
 // --- RAM collection ---
@@ -294,49 +166,9 @@ mod tests {
     }
 
     #[test]
-    fn test_cpu_snapshot_from_fake_stat() {
-        // Simulate /proc/self/stat fields after comm (closing paren)
-        // field index:  0      1    2  3  4  5  6  7  8  9  10  11    12    13     14
-        // proc field:   state ppid ...                 utime stime cutime cstime
-        let after_comm = " S 1234 5678 0 0 -1 4194304 123 0 0 0 100 50 25 12 0 0 20 0 1 0 12345 4096 56 4294967295 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0";
-        let fields: Vec<&str> = after_comm.split_whitespace().collect();
-        let utime: u64 = fields[11].parse().unwrap();
-        let stime: u64 = fields[12].parse().unwrap();
-        let cutime: u64 = fields[13].parse().unwrap();
-        let cstime: u64 = fields[14].parse().unwrap();
-
-        assert_eq!(utime, 100);
-        assert_eq!(stime, 50);
-        assert_eq!(cutime, 25);
-        assert_eq!(cstime, 12);
-        assert_eq!(utime + stime + cutime + cstime, 187);
-    }
-
-    #[test]
-    fn test_cpu_delta_zero_on_first_call() {
-        let snap = Mutex::new(None);
-        let result = cpu_usage(&snap);
-        assert!(result >= 0.0 && result <= 100.0);
-    }
-
-    #[test]
-    fn test_cpu_delta_from_known_values() {
-        // Test the CPU computation directly with known values.
-        // process used 50 ticks in 100 centiseconds (1 second) = 50% of one core
-        let prev = CpuSnapshot {
-            process_ticks: 1000,
-            uptime_cs: 5000,
-        };
-        let current = CpuSnapshot {
-            process_ticks: 1050,
-            uptime_cs: 5100,
-        };
-
-        let tick_delta = current.process_ticks - prev.process_ticks;
-        let time_delta = current.uptime_cs - prev.uptime_cs;
-        let cpu = (tick_delta as f64 / time_delta as f64) * 100.0;
-        // 50 ticks / 100 cs = 0.5 = 50%
-        assert!((cpu - 50.0).abs() < 0.01, "expected 50%, got {cpu}%");
+    fn test_collect_metrics_returns_zero_cpu() {
+        let metrics = collect_metrics();
+        assert_eq!(metrics.cpu_percent, 0.0);
     }
 
     #[test]
