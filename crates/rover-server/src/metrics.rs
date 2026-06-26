@@ -42,10 +42,28 @@ pub async fn collect_metrics() -> ServerMetrics {
 /// Runs on the tokio blocking thread pool since `top` takes ~100-300ms.
 async fn cpu_usage() -> f64 {
     let result = tokio::task::spawn_blocking(|| -> Result<f64, String> {
+        // Try GNU top flags first (-b -n 1), fall back to toybox top flags
         let output = std::process::Command::new("top")
             .args(["-b", "-n", "1"])
             .output()
+            .or_else(|_| {
+                // Toybox top uses different flags: -n 1 alone for one iteration
+                std::process::Command::new("top").args(["-n", "1"]).output()
+            })
             .map_err(|e| format!("top command failed: {e}"))?;
+
+        tracing::debug!(
+            "top exited with status {:?}, stdout len: {}, stderr len: {}",
+            output.status.code(),
+            output.stdout.len(),
+            output.stderr.len()
+        );
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("top exited with error: {}", stderr.trim()));
+        }
+
         parse_top_cpu_header(&output.stdout)
     })
     .await;
@@ -53,7 +71,7 @@ async fn cpu_usage() -> f64 {
     match result {
         Ok(Ok(cpu)) => cpu,
         Ok(Err(e)) => {
-            tracing::warn!("failed to parse top output: {e}");
+            tracing::warn!("failed to get CPU usage: {e}");
             0.0
         }
         Err(e) => {
@@ -63,45 +81,68 @@ async fn cpu_usage() -> f64 {
     }
 }
 
-/// Parse the CPU header line from `top -b -n 1` output.
+/// Parse the CPU header line from `top` output.
 ///
-/// Format (first line after the header row):
+/// Handles both GNU top and toybox top formats.
+///
+/// Toybox top (Termux/Android):
 /// ```
 /// 800%cpu   0%user   0%nice   0%sys 800%idle   0%iow   0%irq   0%sirq   0%host
 /// ```
+/// Usage = (total - idle) / total * 100
 ///
-/// CPU usage = (total - idle) / total * 100
-/// total = cores × 100, e.g., 800 for 8 cores.
+/// GNU top:
+/// ```
+/// %Cpu(s):  0.0 us,  0.0 sy,  0.0 ni,100.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+/// ```
+/// Usage = 100 - idle
 fn parse_top_cpu_header(stdout: &[u8]) -> Result<f64, String> {
     let text = String::from_utf8_lossy(stdout);
 
-    // Find the CPU header line — it contains "%cpu" and "%idle"
-    let cpu_line = text
+    // Try toybox format: line containing "%cpu" and "%idle"
+    if let Some(cpu_line) = text
         .lines()
-        .find(|line| line.contains("%cpu") && line.contains("%idle"))
-        .ok_or("no CPU header line in top output")?;
+        .find(|l| l.contains("%cpu") && l.contains("%idle"))
+    {
+        let total: f64 = cpu_line
+            .split_whitespace()
+            .find(|f| f.ends_with("%cpu"))
+            .and_then(|f| f.trim_end_matches("%cpu").parse().ok())
+            .ok_or_else(|| format!("could not parse total cpu from: {cpu_line}"))?;
 
-    // Parse the "%idle" field
-    // Split on whitespace, find the field ending in "%idle"
-    let idle: f64 = cpu_line
-        .split_whitespace()
-        .find(|f| f.ends_with("%idle"))
-        .and_then(|f| f.trim_end_matches("%idle").parse().ok())
-        .ok_or_else(|| format!("could not parse idle from: {cpu_line}"))?;
+        let idle: f64 = cpu_line
+            .split_whitespace()
+            .find(|f| f.ends_with("%idle"))
+            .and_then(|f| f.trim_end_matches("%idle").parse().ok())
+            .ok_or_else(|| format!("could not parse idle from: {cpu_line}"))?;
 
-    // Parse the total capacity (first field, e.g., "800%cpu")
-    let total: f64 = cpu_line
-        .split_whitespace()
-        .find(|f| f.ends_with("%cpu"))
-        .and_then(|f| f.trim_end_matches("%cpu").parse().ok())
-        .ok_or_else(|| format!("could not parse total cpu from: {cpu_line}"))?;
+        if total <= 0.0 {
+            return Err("total CPU capacity is zero".into());
+        }
 
-    if total <= 0.0 {
-        return Err("total CPU capacity is zero".into());
+        return Ok(((total - idle) / total) * 100.0);
     }
 
-    let used = total - idle;
-    Ok((used / total) * 100.0)
+    // Try GNU top format: line containing "Cpu" and "id,"
+    // GNU top outputs: "%Cpu(s):  0.0 us,  0.0 sy,  0.0 ni,100.0 id,  0.0 wa, ..."
+    if let Some(cpu_line) = text
+        .lines()
+        .find(|l| l.contains("Cpu") && l.contains("id,"))
+    {
+        let idle: f64 = cpu_line
+            .split_whitespace()
+            .filter(|f| f.starts_with(|c: char| c.is_ascii_digit()) && f.contains("id"))
+            .next()
+            .and_then(|f| f.trim_end_matches(',').trim_end_matches("id").parse().ok())
+            .ok_or_else(|| format!("could not parse idle from: {cpu_line}"))?;
+
+        return Ok((100.0 - idle).max(0.0));
+    }
+
+    Err(format!(
+        "no recognizable CPU header in top output ({} bytes)",
+        stdout.len()
+    ))
 }
 
 // --- RAM collection ---
@@ -233,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_top_cpu_header_real() {
+    fn test_parse_toybox_cpu_idle() {
         // Real output from an 8-core Android phone at near-idle
         let header = "\n\
             Tasks: 7 total,   1 running,   6 sleeping,   0 stopped,   0 zombie\n\
@@ -247,16 +288,16 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_top_cpu_header_busy() {
+    fn test_parse_toybox_cpu_busy() {
         // Simulated busy system: 200% used out of 800% total = 25%
-        let header = "\n\
-            800%cpu  50%user  20%nice  30%sys 600%idle  50%iow  30%irq  20%sirq   0%host\n";
+        let header =
+            "\n800%cpu  50%user  20%nice  30%sys 600%idle  50%iow  30%irq  20%sirq   0%host\n";
         let cpu = parse_top_cpu_header(header.as_bytes()).unwrap();
         assert!((cpu - 25.0).abs() < 0.5, "expected ~25%, got {cpu}%");
     }
 
     #[test]
-    fn test_parse_top_cpu_header_quad_core() {
+    fn test_parse_toybox_cpu_quad_core() {
         // 4-core device, 50% usage
         let header =
             "400%cpu 100%user  50%nice  50%sys 200%idle  10%iow   0%irq   0%sirq   0%host\n";
@@ -265,7 +306,24 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_top_cpu_header_no_line() {
+    fn test_parse_gnu_cpu_idle() {
+        // GNU top format (desktop Linux)
+        let header =
+            "\n% Cpu(s):  0.0 us,  0.0 sy,  0.0 ni,100.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st\n";
+        let cpu = parse_top_cpu_header(header.as_bytes()).unwrap();
+        assert!((cpu - 0.0).abs() < 0.01, "expected ~0%, got {cpu}%");
+    }
+
+    #[test]
+    fn test_parse_gnu_cpu_busy() {
+        let header =
+            "\n%Cpu(s): 25.3 us,  5.2 sy,  0.0 ni, 60.1 id,  9.4 wa,  0.0 hi,  0.0 si,  0.0 st\n";
+        let cpu = parse_top_cpu_header(header.as_bytes()).unwrap();
+        assert!((cpu - 39.9).abs() < 0.5, "expected ~39.9%, got {cpu}%");
+    }
+
+    #[test]
+    fn test_parse_top_cpu_no_line() {
         assert!(parse_top_cpu_header(b"no cpu here\n").is_err());
     }
 
