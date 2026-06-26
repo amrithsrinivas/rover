@@ -1,5 +1,5 @@
-use std::net::SocketAddr;
 use rover_transport::{TransportClient, TransportError, TransportServer};
+use std::net::SocketAddr;
 
 /// Stub transport for future relay-based connectivity.
 /// All methods return `TransportError::NotImplemented`.
@@ -25,10 +25,7 @@ impl TransportServer for RelayTransport {
         ))
     }
 
-    async fn serve(
-        &self,
-        _router: tonic::transport::server::Router,
-    ) -> Result<(), TransportError> {
+    async fn serve(&self, _router: tonic::transport::server::Router) -> Result<(), TransportError> {
         Err(TransportError::NotImplemented(
             "relay transport not implemented yet".into(),
         ))
@@ -57,10 +54,7 @@ impl Default for RelayTransportClient {
 
 #[async_trait::async_trait]
 impl TransportClient for RelayTransportClient {
-    async fn connect(
-        &self,
-        _address: &str,
-    ) -> Result<tonic::transport::Channel, TransportError> {
+    async fn connect(&self, _address: &str) -> Result<tonic::transport::Channel, TransportError> {
         Err(TransportError::NotImplemented(
             "relay transport not implemented yet".into(),
         ))

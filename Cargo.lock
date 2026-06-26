@@ -3491,7 +3491,6 @@ name = "rover-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "chrono",
  "flate2",
  "iced",
@@ -3499,13 +3498,9 @@ dependencies = [
  "rfd",
  "rover-core",
  "rover-proto",
- "rover-transport",
- "rover-transport-lan",
- "rover-transport-relay",
  "serde",
  "serde_json",
  "tar",
- "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
  "toml",
@@ -3513,7 +3508,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
- "walkdir",
 ]
 
 [[package]]

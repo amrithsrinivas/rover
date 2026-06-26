@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "rover"
@@ -12,9 +13,6 @@ path = "src/main.rs"
 [dependencies]
 rover-core.workspace = true
 rover-proto.workspace = true
-rover-transport.workspace = true
-rover-transport-lan.workspace = true
-rover-transport-relay.workspace = true
 
 tokio.workspace = true
 tokio-stream.workspace = true
@@ -22,16 +20,13 @@ tonic.workspace = true
 prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-chrono.workspace = true
-uuid.workspace = true
-iced.workspace = true
-rfd.workspace = true
+toml.workspace = true
 flate2.workspace = true
 tar.workspace = true
-toml.workspace = true
-async-trait.workspace = true
-thiserror.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+iced.workspace = true
+rfd.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true
-walkdir = "2"
