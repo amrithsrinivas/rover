@@ -54,6 +54,7 @@ pub fn dashboard(app: &RoverApp) -> Element<'_, Message> {
 
     let metrics_row = metrics_cards(d);
 
+    let deploys_section = deploy_activity(app);
     let apps_section = apps_list(app, d);
 
     let content = column![
@@ -62,6 +63,8 @@ pub fn dashboard(app: &RoverApp) -> Element<'_, Message> {
         info_bar,
         Space::with_height(16),
         metrics_row,
+        Space::with_height(20),
+        deploys_section,
         Space::with_height(20),
         text("Applications").size(14).color(colors::TEXT_MUTED),
         Space::with_height(8),
@@ -135,6 +138,164 @@ fn metric_card<'a>(label: &'static str, value: String, color: Color) -> Element<
         ..container::Style::default()
     })
     .into()
+}
+
+fn deploy_activity(app: &RoverApp) -> Element<'_, Message> {
+    if app.active_deploys.is_empty() {
+        return Space::with_height(0).into();
+    }
+
+    let active_count = app.active_deploy_count();
+    let mut header = row![
+        text("Deployments").size(14).color(colors::TEXT_MUTED),
+        Space::with_width(Length::Fill),
+    ]
+    .align_y(Alignment::Center);
+
+    if active_count == 0 {
+        header = header.push(
+            button(text("Clear finished").size(11))
+                .style(button::text)
+                .on_press(Message::ClearFinishedDeploys),
+        );
+    } else {
+        header = header.push(
+            text(format!("{active_count} running"))
+                .size(11)
+                .color(colors::ACCENT),
+        );
+    }
+
+    let cards: Vec<Element<Message>> = app
+        .active_deploys
+        .iter()
+        .rev()
+        .map(|deploy| deploy_card(app, deploy))
+        .collect();
+
+    column![header, Space::with_height(8), column(cards).spacing(8)]
+        .spacing(0)
+        .into()
+}
+
+fn deploy_card<'a>(app: &'a RoverApp, deploy: &'a crate::DeployState) -> Element<'a, Message> {
+    let status_color = deploy_status_color(&deploy.status);
+    let latest = deploy.latest_log().unwrap_or("No build output yet");
+    let expanded = app.expanded_deploy == Some(deploy.id);
+    let toggle_label = if expanded { "Hide log" } else { "View log" };
+
+    let mut actions = row![
+        button(text(toggle_label).size(11))
+            .style(button::text)
+            .on_press(Message::ToggleDeployLog(deploy.id)),
+        Space::with_width(8),
+        button(text("Copy log").size(11))
+            .style(button::text)
+            .on_press(Message::Copy(deploy.logs.join("\n"))),
+    ]
+    .align_y(Alignment::Center);
+
+    if let Some(app_id) = &deploy.app_id {
+        actions = actions.push(Space::with_width(8)).push(
+            button(text("View app").size(11))
+                .style(button::text)
+                .on_press(Message::SelectApp(app_id.clone())),
+        );
+    }
+
+    let mut body = column![
+        row![
+            column![
+                text(&deploy.name).size(13).color(colors::TEXT),
+                Space::with_height(2),
+                text(format!(
+                    "{} · {}",
+                    deploy.runtime,
+                    truncate_middle(&deploy.source_path, 56)
+                ))
+                .size(11)
+                .color(colors::TEXT_MUTED),
+            ]
+            .spacing(0)
+            .width(Length::Fill),
+            status_badge(&deploy.status, status_color),
+        ]
+        .align_y(Alignment::Center),
+        Space::with_height(8),
+        text(latest).size(11).color(colors::TEXT_MUTED),
+        Space::with_height(8),
+        actions,
+    ]
+    .spacing(0)
+    .padding(12);
+
+    if expanded {
+        let log_lines: Vec<Element<Message>> = deploy
+            .logs
+            .iter()
+            .map(|line| {
+                text(line)
+                    .size(11)
+                    .font(iced::Font::MONOSPACE)
+                    .color(colors::TEXT)
+                    .into()
+            })
+            .collect();
+        let log = container(scrollable(column(log_lines).spacing(1)).height(Length::Fixed(140.0)))
+            .padding(10)
+            .style(|_theme| container::Style {
+                background: Some(iced::Background::Color(iced::Color::from_rgb(
+                    0.02, 0.02, 0.04,
+                ))),
+                border: iced::Border {
+                    color: colors::BORDER,
+                    width: 1.0,
+                    radius: 6.0.into(),
+                },
+                ..container::Style::default()
+            });
+        body = body.push(Space::with_height(8)).push(log);
+    }
+
+    container(body)
+        .width(Length::Fill)
+        .style(|_theme| container::Style {
+            background: Some(iced::Background::Color(colors::ELEVATED)),
+            border: iced::Border {
+                color: colors::BORDER,
+                width: 1.0,
+                radius: 6.0.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
+}
+
+fn deploy_status_color(status: &str) -> Color {
+    match status {
+        "complete" => colors::SUCCESS,
+        "failed" => colors::DANGER,
+        "packaging" | "sending" | "building" | "starting" => colors::ACCENT,
+        _ => colors::WARNING,
+    }
+}
+
+fn truncate_middle(value: &str, max_chars: usize) -> String {
+    if value.chars().count() <= max_chars {
+        return value.to_string();
+    }
+
+    let keep = max_chars.saturating_sub(3) / 2;
+    let start: String = value.chars().take(keep).collect();
+    let end: String = value
+        .chars()
+        .rev()
+        .take(keep)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    format!("{start}...{end}")
 }
 
 fn apps_list<'a>(_app: &'a RoverApp, d: &'a crate::state::DeviceState) -> Element<'a, Message> {

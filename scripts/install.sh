@@ -14,7 +14,7 @@ echo "========================================"
 echo ""
 # 1. Install dependencies via pkg
 echo "[1/4] Installing dependencies..."
-pkg update -y > /dev/null 2>&1
+pkg update
 pkg install -y \
     git \
     rust \
@@ -26,8 +26,8 @@ pkg install -y \
     cmake \
     pkg-config \
     golang \
-    nodejs \
-    > /dev/null 2>&1
+    nodejs
+
 echo "  ✓ Dependencies installed"
 # 2. Clone or update the repo
 echo "[2/4] Fetching Rover source..."

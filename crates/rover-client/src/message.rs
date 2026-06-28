@@ -99,10 +99,18 @@ pub enum Message {
     RemoveDEVar(usize),
     /// Submit deploy.
     SubmitDeploy,
-    /// Deploy complete with collected events.
-    DeployDone(Vec<DeployEvent>),
-    /// Deploy failed.
-    DeployErr(String),
+    /// Background deploy status changed: (deploy_id, status).
+    DeployStatus(usize, String),
+    /// Background deploy emitted a stream event: (deploy_id, event).
+    DeployEvent(usize, DeployEvent),
+    /// Background deploy task finished without a final server event.
+    DeployStreamEnded(usize),
+    /// Background deploy failed outside the server event stream: (deploy_id, error).
+    DeployErr(usize, String),
+    /// Expand/collapse a dashboard deploy log card.
+    ToggleDeployLog(usize),
+    /// Clear completed and failed deploy cards.
+    ClearFinishedDeploys,
 
     // --- Env vars on app detail ---
     /// Env var key input.
@@ -113,10 +121,16 @@ pub enum Message {
     AddEnv,
 
     // --- Toast notifications ---
+    /// Show an informational toast.
+    Info(String),
     /// Show an error toast.
     Toast(String),
     /// Dismiss a toast by index.
     Dismiss(usize),
+
+    // --- Clipboard ---
+    /// Copy the given text to the system clipboard.
+    Copy(String),
 }
 
 /// Shared reference to the gRPC client, used across async tasks.

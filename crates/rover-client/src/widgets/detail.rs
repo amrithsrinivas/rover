@@ -297,8 +297,17 @@ fn logs_section(app: &RoverApp) -> Element<'_, Message> {
         ..container::Style::default()
     });
 
+    let copy_btn = button(text("Copy").size(11).color(colors::TEXT_MUTED))
+        .style(button::text)
+        .on_press(Message::Copy(app.log_entries.join("\n")));
+
     column![
-        text("Logs").size(14).color(colors::TEXT_MUTED),
+        row![
+            text("Logs").size(14).color(colors::TEXT_MUTED),
+            Space::with_width(Length::Fill),
+            copy_btn,
+        ]
+        .align_y(Alignment::Center),
         Space::with_height(4),
         log_container.height(200),
     ]

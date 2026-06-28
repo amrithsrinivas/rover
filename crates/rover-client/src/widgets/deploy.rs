@@ -88,8 +88,12 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
 
     let env_section = deploy_env_section(app);
 
-    let deploy_btn = if app.deploying {
-        button(text("Deploying...").size(14))
+    let deploy_btn = if app.deploy_name.trim().is_empty() {
+        button(text("Enter an app name").size(14))
+            .width(Length::Fill)
+            .style(button::primary)
+    } else if app.deploy_runtime.is_empty() {
+        button(text("Select a runtime").size(14))
             .width(Length::Fill)
             .style(button::primary)
     } else if app.deploy_path.is_empty() {
@@ -103,9 +107,7 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
             .on_press(Message::SubmitDeploy)
     };
 
-    let log_section = build_log_section(app);
-
-    let mut form = column![
+    let form = column![
         title_row,
         Space::with_height(16),
         text("App Name").size(10).color(colors::TEXT_MUTED),
@@ -129,11 +131,6 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
     ]
     .spacing(0)
     .padding(24);
-
-    if !app.deploy_log.is_empty() {
-        form = form.push(Space::with_height(12));
-        form = form.push(log_section);
-    }
 
     scrollable(form).height(Length::Fill).into()
 }
@@ -195,35 +192,4 @@ fn deploy_env_section(app: &RoverApp) -> Element<'_, Message> {
     }
 
     col.into()
-}
-
-fn build_log_section(app: &RoverApp) -> Element<'_, Message> {
-    let log_lines: Vec<Element<Message>> = app
-        .deploy_log
-        .iter()
-        .map(|line| {
-            text(line)
-                .size(11)
-                .font(iced::Font::MONOSPACE)
-                .color(colors::TEXT)
-                .into()
-        })
-        .collect();
-
-    let log_content = container(scrollable(column(log_lines).spacing(1)).height(Length::Fill));
-
-    container(log_content.padding(10))
-        .style(|_theme| container::Style {
-            background: Some(iced::Background::Color(iced::Color::from_rgb(
-                0.02, 0.02, 0.04,
-            ))),
-            border: iced::Border {
-                color: colors::BORDER,
-                width: 1.0,
-                radius: 6.0.into(),
-            },
-            ..container::Style::default()
-        })
-        .height(150)
-        .into()
 }
