@@ -18,3 +18,4 @@ Thumbs.db
 
 # Rover server data directory (created at runtime)
 .rover/
+/dist
