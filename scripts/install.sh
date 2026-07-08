@@ -14,7 +14,7 @@ echo "========================================"
 echo ""
 # 1. Install dependencies via pkg
 echo "[1/4] Installing dependencies..."
-pkg update
+pkg update && pkg upgrade -y
 pkg install -y \
     git \
     rust \
