@@ -65,6 +65,14 @@ message AppDetailResponse {
   optional int32 pid = 12;
 }
 
+// --- Update app commands ---
+
+message UpdateAppRequest {
+  string app_id = 1;
+  optional string build_command = 2;
+  optional string run_command = 3;
+}
+
 // --- Environment variables ---
 
 message SetEnvRequest {
@@ -126,5 +134,6 @@ service AppService {
   rpc SetEnv(SetEnvRequest) returns (AppDetailResponse);
   rpc DeleteEnv(DeleteEnvRequest) returns (AppDetailResponse);
   rpc SetSecret(SetSecretRequest) returns (rover.v1.Empty);
+  rpc UpdateApp(UpdateAppRequest) returns (AppDetailResponse);
   rpc Shell(stream ShellInput) returns (stream ShellOutput);
 }

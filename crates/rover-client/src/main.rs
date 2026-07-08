@@ -107,6 +107,8 @@ fn init() -> (RoverApp, Task<Message>) {
         confirm_device_delete: None,
         env_key: String::new(),
         env_value: String::new(),
+        build_cmd_input: String::new(),
+        run_cmd_input: String::new(),
         toasts: Vec::new(),
     };
 

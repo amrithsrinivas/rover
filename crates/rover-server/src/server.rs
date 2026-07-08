@@ -412,6 +412,72 @@ impl AppService for RoverServer {
         Ok(Response::new(v1::Empty {}))
     }
 
+    async fn update_app(
+        &self,
+        request: Request<v1::UpdateAppRequest>,
+    ) -> Result<Response<v1::AppDetailResponse>, Status> {
+        let req = request.into_inner();
+        let app_id = &req.app_id;
+
+        let app = self
+            .store
+            .get_app(app_id)
+            .map_err(|e| Status::internal(e.to_string()))?
+            .ok_or_else(|| Status::not_found(format!("app {app_id} not found")))?;
+
+        // Update commands in DB
+        self.store
+            .update_app_commands(
+                app_id,
+                req.build_command.as_deref(),
+                req.run_command.as_deref(),
+            )
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        // If the app was running, stop and restart with new commands
+        if app.status == "running" {
+            self.process_manager
+                .stop(app_id)
+                .await
+                .map_err(|e| Status::internal(e.to_string()))?;
+
+            // Re-read to get updated commands
+            let updated = self
+                .store
+                .get_app(app_id)
+                .map_err(|e| Status::internal(e.to_string()))?
+                .ok_or_else(|| Status::not_found("app vanished during update"))?;
+
+            let env_vars: std::collections::HashMap<_, _> = self
+                .store
+                .get_env_vars(app_id)
+                .map_err(|e| Status::internal(e.to_string()))?
+                .into_iter()
+                .map(|v| (v.key, v.value))
+                .collect();
+
+            let (program, args) = crate::process::parse_shell_command(&updated.run_command);
+            let source_dir = std::path::PathBuf::from(&updated.source_dir);
+
+            self.process_manager
+                .spawn(app_id, &program, &args, &env_vars, &source_dir)
+                .await
+                .map_err(|e| Status::internal(e.to_string()))?;
+
+            self.store
+                .update_app_status(app_id, "running")
+                .map_err(|e| Status::internal(e.to_string()))?;
+        }
+
+        // Return fresh detail
+        let updated = self
+            .store
+            .get_app(app_id)
+            .map_err(|e| Status::internal(e.to_string()))?
+            .ok_or_else(|| Status::not_found("app vanished during update"))?;
+        Ok(Response::new(app_to_detail(&updated, &self.store)?))
+    }
+
     type StreamLogsStream =
         Pin<Box<dyn tokio_stream::Stream<Item = Result<v1::LogEntry, Status>> + Send>>;
 

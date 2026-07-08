@@ -120,6 +120,14 @@ pub enum Message {
     /// Add env var to running app.
     AddEnv,
 
+    // --- Update app commands ---
+    /// Build command input on detail screen.
+    SetBuildCmd(String),
+    /// Run command input on detail screen.
+    SetRunCmd(String),
+    /// Submit updated commands to server (stop + restart if running).
+    UpdateApp(String),
+
     // --- Toast notifications ---
     /// Show an informational toast.
     Info(String),

@@ -17,7 +17,7 @@ pub fn app_detail(app: &RoverApp) -> Element<'_, Message> {
         }
     };
 
-    let back_btn = button(text("← Back").size(13))
+    let back_btn = button(text("\u{2190} Back").size(13))
         .style(button::text)
         .on_press(Message::Back);
 
@@ -57,12 +57,18 @@ pub fn app_detail(app: &RoverApp) -> Element<'_, Message> {
 
     let commands_section = column![
         text("Build Command").size(10).color(colors::TEXT_MUTED),
-        text(&detail.build_command)
-            .size(11)
-            .color(colors::TEXT_MUTED),
-        Space::with_height(4),
+        text_input("build command", &app.build_cmd_input)
+            .on_input(Message::SetBuildCmd)
+            .size(12),
+        Space::with_height(6),
         text("Run Command").size(10).color(colors::TEXT_MUTED),
-        text(&detail.run_command).size(11).color(colors::TEXT_MUTED),
+        text_input("run command", &app.run_cmd_input)
+            .on_input(Message::SetRunCmd)
+            .size(12),
+        Space::with_height(8),
+        button(text("Update & Restart").size(13))
+            .style(button::primary)
+            .on_press(Message::UpdateApp(detail.app_id.clone())),
     ]
     .spacing(2);
 

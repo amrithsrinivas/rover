@@ -255,4 +255,25 @@ impl RoverClient {
             .into_inner();
         Ok(resp)
     }
+
+    /// Update an app's build and/or run command, restarting if running.
+    pub async fn update_app(
+        &mut self,
+        app_id: &str,
+        build_command: Option<String>,
+        run_command: Option<String>,
+    ) -> Result<v1::AppDetailResponse, String> {
+        let req = Request::new(v1::UpdateAppRequest {
+            app_id: app_id.to_string(),
+            build_command,
+            run_command,
+        });
+        let resp = self
+            .app
+            .update_app(req)
+            .await
+            .map_err(|e| format!("update_app failed: {e}"))?
+            .into_inner();
+        Ok(resp)
+    }
 }

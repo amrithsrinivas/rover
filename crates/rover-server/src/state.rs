@@ -214,6 +214,30 @@ impl StateStore {
         Ok(())
     }
 
+    /// Update an app's build and/or run command.
+    pub fn update_app_commands(
+        &self,
+        app_id: &str,
+        build_command: Option<&str>,
+        run_command: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        let conn = self.conn.lock().unwrap();
+        if let Some(bc) = build_command {
+            conn.execute(
+                "UPDATE apps SET build_command = ?1, updated_at = ?2 WHERE app_id = ?3",
+                params![bc, now, app_id],
+            )?;
+        }
+        if let Some(rc) = run_command {
+            conn.execute(
+                "UPDATE apps SET run_command = ?1, updated_at = ?2 WHERE app_id = ?3",
+                params![rc, now, app_id],
+            )?;
+        }
+        Ok(())
+    }
+
     /// Delete an app and all associated data (cascades to env_vars, logs).
     pub fn delete_app(&self, app_id: &str) -> anyhow::Result<()> {
         let conn = self.conn.lock().unwrap();
@@ -534,6 +558,48 @@ mod tests {
             .unwrap();
         store.delete_app("d").unwrap();
         assert!(store.get_app("d").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_update_app_commands() {
+        let (store, _dir) = open_test_store();
+        store
+            .insert_app(
+                "u",
+                "update-test",
+                "python",
+                "service",
+                "stopped",
+                "old-build",
+                "old-run",
+                "/u",
+                "m",
+            )
+            .unwrap();
+
+        // Update build command only
+        store
+            .update_app_commands("u", Some("new-build"), None)
+            .unwrap();
+        let app = store.get_app("u").unwrap().unwrap();
+        assert_eq!(app.build_command, "new-build");
+        assert_eq!(app.run_command, "old-run");
+
+        // Update run command only
+        store
+            .update_app_commands("u", None, Some("new-run"))
+            .unwrap();
+        let app = store.get_app("u").unwrap().unwrap();
+        assert_eq!(app.build_command, "new-build");
+        assert_eq!(app.run_command, "new-run");
+
+        // Update both
+        store
+            .update_app_commands("u", Some("both-build"), Some("both-run"))
+            .unwrap();
+        let app = store.get_app("u").unwrap().unwrap();
+        assert_eq!(app.build_command, "both-build");
+        assert_eq!(app.run_command, "both-run");
     }
 
     #[test]

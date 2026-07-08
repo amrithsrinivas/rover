@@ -69,6 +69,8 @@ pub struct RoverApp {
     pub confirm_device_delete: Option<usize>,
     pub env_key: String,
     pub env_value: String,
+    pub build_cmd_input: String,
+    pub run_cmd_input: String,
     pub toasts: Vec<ToastState>,
 }
 

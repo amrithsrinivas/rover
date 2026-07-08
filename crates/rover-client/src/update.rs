@@ -142,7 +142,10 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             fetch_detail(app, &app_id)
         }
         Message::Detail(detail) => {
-            app.app_detail = Some(*detail);
+            let d = *detail;
+            app.build_cmd_input = d.build_command.clone();
+            app.run_cmd_input = d.run_command.clone();
+            app.app_detail = Some(d);
             Task::none()
         }
         Message::Logs(lines) => {
@@ -296,6 +299,44 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::AddEnv => add_env(app),
+
+        Message::SetBuildCmd(value) => {
+            app.build_cmd_input = value;
+            Task::none()
+        }
+        Message::SetRunCmd(value) => {
+            app.run_cmd_input = value;
+            Task::none()
+        }
+        Message::UpdateApp(app_id) => {
+            let client = get_client(app);
+            let aid = app_id;
+            let dev_name = active_device_name(app);
+            let build = app.build_cmd_input.trim().to_string();
+            let run = app.run_cmd_input.trim().to_string();
+            Task::perform(
+                async move {
+                    if let Some(client) = client {
+                        let mut client = client.lock().await;
+                        client
+                            .update_app(
+                                &aid,
+                                if build.is_empty() { None } else { Some(build) },
+                                if run.is_empty() { None } else { Some(run) },
+                            )
+                            .await
+                            .map(Box::new)
+                            .map_err(|e| e.to_string())
+                    } else {
+                        Err("Not connected".into())
+                    }
+                },
+                move |result| match result {
+                    Ok(detail) => Message::Detail(detail),
+                    Err(e) => Message::Toast(format!("{dev_name}: {e}")),
+                },
+            )
+        }
 
         Message::Info(message) => {
             app.toasts = vec![ToastState {
