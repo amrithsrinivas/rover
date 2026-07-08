@@ -43,17 +43,9 @@ fi
 # 3. Build the server
 echo "[3/4] Building rover-server (this may take a few minutes)..."
 cd "$INSTALL_DIR"
-
-# Retry up to 3 times — Android/Termux sometimes hits ETXTBSY on build scripts
-RETRY=0
-while [ $RETRY -lt 3 ]; do
-    if CARGO_BUILD_JOBS=1 CARGO_NET_RETRY=3 cargo build --release -p rover-server 2>&1; then
-        break
-    fi
-    RETRY=$((RETRY + 1))
-    echo "  Build attempt $RETRY failed, retrying..."
-    sleep 2
-done
+if CARGO_BUILD_JOBS=1 cargo build --release -p rover-server 2>&1; then
+    break
+fi
 echo "  ✓ Build complete"
 
 # 4. Launch the server
