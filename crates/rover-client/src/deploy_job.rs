@@ -240,9 +240,9 @@ struct GitignoreRules {
 
 #[derive(Debug, Clone)]
 enum GitignorePattern {
-    Exact(String),
-    Suffix(String),
-    Prefix(String),
+    Exact(String, bool),
+    Suffix(String, bool),
+    Prefix(String, bool),
 }
 
 impl GitignoreRules {
@@ -253,29 +253,24 @@ impl GitignoreRules {
     }
 
     fn matches(&self, name: &str, is_dir: bool) -> bool {
+        let mut ignored = false;
         for pattern in &self.patterns {
-            match pattern {
-                GitignorePattern::Exact(value) => {
-                    if name == value {
-                        return true;
-                    }
+            let hit = match pattern {
+                GitignorePattern::Exact(value, _) => name == *value,
+                GitignorePattern::Suffix(glob, _) => name.ends_with(glob),
+                GitignorePattern::Prefix(glob, _) => {
+                    is_dir && (name.starts_with(glob) || name == glob.trim_end_matches('/'))
                 }
-                GitignorePattern::Suffix(glob) => {
-                    if name.ends_with(glob) {
-                        return true;
-                    }
-                }
-                GitignorePattern::Prefix(glob) => {
-                    if is_dir && name.starts_with(glob) {
-                        return true;
-                    }
-                    if is_dir && name == glob.trim_end_matches('/') {
-                        return true;
-                    }
-                }
+            };
+            if hit {
+                ignored = match pattern {
+                    GitignorePattern::Exact(_, neg)
+                    | GitignorePattern::Suffix(_, neg)
+                    | GitignorePattern::Prefix(_, neg) => !neg,
+                };
             }
         }
-        false
+        ignored
     }
 }
 
@@ -289,16 +284,20 @@ fn parse_gitignore(dir: &std::path::Path) -> GitignoreRules {
     let mut patterns = Vec::new();
     for line in contents.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
+        if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
+        let negated = trimmed.starts_with('!');
+        let effective = if negated { trimmed[1..].trim() } else { trimmed };
+        // Remove leading slash for root-only patterns
+        let effective = effective.strip_prefix('/').unwrap_or(effective);
 
-        let pattern = if trimmed.ends_with('/') {
-            GitignorePattern::Prefix(trimmed.to_string())
-        } else if trimmed.starts_with("*.") {
-            GitignorePattern::Suffix(trimmed[1..].to_string())
+        let pattern = if effective.ends_with('/') {
+            GitignorePattern::Prefix(effective.to_string(), negated)
+        } else if effective.starts_with("*.") {
+            GitignorePattern::Suffix(effective[1..].to_string(), negated)
         } else {
-            GitignorePattern::Exact(trimmed.to_string())
+            GitignorePattern::Exact(effective.to_string(), negated)
         };
         patterns.push(pattern);
     }

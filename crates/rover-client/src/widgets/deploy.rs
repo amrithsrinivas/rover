@@ -87,16 +87,54 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
     .align_y(Alignment::Center);
 
     let source_row: Element<Message> = if app.deploy_use_github {
+        let token_labels: Vec<String> = app
+            .github_tokens
+            .iter()
+            .map(|t| t.label.clone())
+            .collect();
+
+        let token_row = row![
+            pick_list(
+                token_labels,
+                app.selected_github_token.clone(),
+                |s| Message::SelectGithubToken(Some(s)),
+            )
+            .placeholder("No token (public repo)")
+            .width(Length::Fill),
+            button(text("\u{2715}").size(11).color(colors::TEXT_MUTED))
+                .style(button::text)
+                .on_press(Message::SelectGithubToken(None)),
+        ]
+        .spacing(4)
+        .align_y(Alignment::Center);
+
+        let add_token_row = row![
+            text_input("Label (e.g. Personal)", &app.new_token_label)
+                .on_input(Message::SetNewTokenLabel)
+                .size(12)
+                .width(Length::Fixed(150.0)),
+            text_input("ghp_...", &app.new_token_value)
+                .on_input(Message::SetNewTokenValue)
+                .size(12)
+                .width(Length::Fill),
+            button(text("Save").size(12))
+                .style(button::primary)
+                .on_press(Message::SaveGithubToken),
+        ]
+        .spacing(4)
+        .align_y(Alignment::Center);
+
         column![
             text_input("https://github.com/user/repo", &app.deploy_github_url)
                 .on_input(Message::SetDGithubUrl)
                 .size(13)
                 .width(Length::Fill),
             Space::with_height(6),
-            text_input("GitHub token (optional, for private repos)", &app.deploy_github_token)
-                .on_input(Message::SetDGithubToken)
-                .size(13)
-                .width(Length::Fill),
+            text("Access Token").size(10).color(colors::TEXT_MUTED),
+            Space::with_height(2),
+            token_row,
+            Space::with_height(4),
+            add_token_row,
         ]
         .spacing(0)
         .into()

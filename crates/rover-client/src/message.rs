@@ -91,8 +91,14 @@ pub enum Message {
     ToggleGithub,
     /// Deploy form: GitHub URL.
     SetDGithubUrl(String),
-    /// Deploy form: GitHub token (for private repos).
-    SetDGithubToken(String),
+    /// Select a saved GitHub token by index, or None for manual entry.
+    SelectGithubToken(Option<String>),
+    /// Text input for new token label.
+    SetNewTokenLabel(String),
+    /// Text input for new token value.
+    SetNewTokenValue(String),
+    /// Save a new token from the inputs.
+    SaveGithubToken,
     /// Open native folder picker.
     PickPath,
     /// Deploy form: env var key.

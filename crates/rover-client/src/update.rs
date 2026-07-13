@@ -181,7 +181,6 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             app.deploy_path.clear();
             app.deploy_use_github = false;
             app.deploy_github_url.clear();
-            app.deploy_github_token.clear();
             app.deploy_env_file.clear();
             app.deploy_env_vars.clear();
             app.deploy_env_key.clear();
@@ -220,8 +219,32 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             app.deploy_github_url = value;
             Task::none()
         }
-        Message::SetDGithubToken(value) => {
-            app.deploy_github_token = value;
+        Message::SelectGithubToken(idx) => {
+            app.selected_github_token = idx;
+            Task::none()
+        }
+        Message::SetNewTokenLabel(value) => {
+            app.new_token_label = value;
+            Task::none()
+        }
+        Message::SetNewTokenValue(value) => {
+            app.new_token_value = value;
+            Task::none()
+        }
+        Message::SaveGithubToken => {
+            let label = app.new_token_label.trim().to_string();
+            let value = app.new_token_value.trim().to_string();
+            if !label.is_empty() && !value.is_empty() {
+                let token = crate::github_tokens::GithubToken::new(label.clone(), value);
+                app.selected_github_token = Some(label);
+                app.github_tokens.push(token);
+                app.new_token_label.clear();
+                app.new_token_value.clear();
+                let store = crate::github_tokens::GithubTokenStore {
+                    tokens: app.github_tokens.clone(),
+                };
+                store.save();
+            }
             Task::none()
         }
         Message::SetDPath(value) => {

@@ -1,6 +1,7 @@
 mod api;
 mod app;
 mod deploy_job;
+mod github_tokens;
 mod deploy_update;
 mod message;
 mod state;
@@ -106,7 +107,10 @@ fn init() -> (RoverApp, Task<Message>) {
         deploy_path: String::new(),
         deploy_use_github: false,
         deploy_github_url: String::new(),
-        deploy_github_token: String::new(),
+        github_tokens: github_tokens::GithubTokenStore::load().tokens,
+        selected_github_token: None,
+        new_token_label: String::new(),
+        new_token_value: String::new(),
         deploy_env_file: String::new(),
         deploy_env_vars: Vec::new(),
         deploy_env_key: String::new(),
