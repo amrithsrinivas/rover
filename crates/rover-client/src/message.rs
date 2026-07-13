@@ -87,6 +87,12 @@ pub enum Message {
     SetDRun(String),
     /// Deploy form: source path.
     SetDPath(String),
+    /// Toggle between local dir and GitHub deploy.
+    ToggleGithub,
+    /// Deploy form: GitHub URL.
+    SetDGithubUrl(String),
+    /// Deploy form: GitHub token (for private repos).
+    SetDGithubToken(String),
     /// Open native folder picker.
     PickPath,
     /// Deploy form: env var key.

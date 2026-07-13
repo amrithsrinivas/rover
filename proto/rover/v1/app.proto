@@ -11,6 +11,8 @@ message DeployRequest {
   reserved 3;
   string manifest_toml = 4;
   bytes source_archive = 5;
+  optional string github_url = 6;
+  optional string github_token = 7;
 }
 
 message DeployResponse {

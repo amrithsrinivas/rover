@@ -241,7 +241,12 @@ impl AppService for RoverServer {
 
         let event_rx = self
             .deployer
-            .deploy(&manifest, req.source_archive)
+            .deploy(
+                &manifest,
+                req.source_archive,
+                req.github_url,
+                req.github_token,
+            )
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 

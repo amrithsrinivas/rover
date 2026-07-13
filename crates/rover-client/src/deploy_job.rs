@@ -37,6 +37,8 @@ pub fn start_deploy_task(
     run_cmd: String,
     source_path: String,
     env_vars: Vec<(String, String)>,
+    github_url: Option<String>,
+    github_token: Option<String>,
 ) -> Task<Message> {
     let (tx, rx) = mpsc::channel(128);
 
@@ -50,6 +52,8 @@ pub fn start_deploy_task(
             run_cmd,
             source_path,
             env_vars,
+            github_url,
+            github_token,
             tx,
         )
         .await;
@@ -69,6 +73,8 @@ async fn run_deploy_task(
     run_cmd: String,
     source_path: String,
     env_vars: Vec<(String, String)>,
+    github_url: Option<String>,
+    github_token: Option<String>,
     tx: mpsc::Sender<Message>,
 ) {
     let result = run_deploy_task_inner(
@@ -80,6 +86,8 @@ async fn run_deploy_task(
         run_cmd,
         source_path,
         env_vars,
+        github_url,
+        github_token,
         tx.clone(),
     )
     .await;
@@ -98,6 +106,8 @@ async fn run_deploy_task_inner(
     run_cmd: String,
     source_path: String,
     env_vars: Vec<(String, String)>,
+    github_url: Option<String>,
+    github_token: Option<String>,
     tx: mpsc::Sender<Message>,
 ) -> Result<(), String> {
     let c = client.ok_or_else(|| String::from("Not connected"))?;
@@ -136,7 +146,11 @@ async fn run_deploy_task_inner(
     let manifest_toml = toml::to_string_pretty(&toml::Value::Table(manifest_map))
         .map_err(|e| format!("TOML serialization error: {e}"))?;
 
-    let source_bytes = package_source(&source_path).await?;
+    let source_bytes = if github_url.is_none() {
+        package_source(&source_path).await?
+    } else {
+        Vec::new()
+    };
 
     tx.send(Message::DeployStatus(deploy_id, String::from("sending")))
         .await
@@ -147,6 +161,8 @@ async fn run_deploy_task_inner(
         runtime: runtime_proto,
         manifest_toml,
         source_archive: source_bytes,
+        github_url,
+        github_token,
     };
 
     let mut stream = {
@@ -188,11 +204,20 @@ async fn package_source(path: &str) -> Result<Vec<u8>, String> {
         ".DS_Store",
     ];
 
+    // Suffixes to always exclude (catches *.sqlite, *.db, *.duckdb, *.env, etc.)
+    let always_ignore_suffix: &[&str] = &[
+        ".sqlite",
+        ".sqlite3",
+        ".db",
+        ".duckdb",
+        ".env",
+    ];
+
     let mut archive = tar::Builder::new(Vec::new());
     let root_rules = parse_gitignore(path);
     let base = path.to_path_buf();
 
-    walk(&base, &base, &mut archive, always_ignore, &root_rules)?;
+    walk(&base, &base, &mut archive, always_ignore, always_ignore_suffix, &root_rules)?;
 
     let tar_bytes = archive
         .into_inner()
@@ -286,6 +311,7 @@ fn walk(
     base: &std::path::Path,
     archive: &mut tar::Builder<Vec<u8>>,
     always_ignore: &[&str],
+    always_ignore_suffix: &[&str],
     parent_rules: &GitignoreRules,
 ) -> Result<(), String> {
     let local_rules = parse_gitignore(dir);
@@ -296,7 +322,9 @@ fn walk(
         let name = path.file_name().unwrap().to_string_lossy();
         let is_dir = path.is_dir();
 
-        if always_ignore.contains(&name.as_ref()) {
+        if always_ignore.contains(&name.as_ref())
+            || always_ignore_suffix.iter().any(|s| name.ends_with(&**s))
+        {
             continue;
         }
 
@@ -321,7 +349,7 @@ fn walk(
             archive
                 .append_data(&mut header, dir_path, &mut std::io::empty())
                 .map_err(|e| format!("tar append dir error: {e}"))?;
-            walk(&path, base, archive, always_ignore, parent_rules)?;
+            walk(&path, base, archive, always_ignore, always_ignore_suffix, parent_rules)?;
         } else if path.is_file() {
             let data = std::fs::read(&path).map_err(|e| format!("read file: {e}"))?;
             let mut header = tar::Header::new_gnu();

@@ -179,6 +179,9 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             app.deploy_build.clear();
             app.deploy_run.clear();
             app.deploy_path.clear();
+            app.deploy_use_github = false;
+            app.deploy_github_url.clear();
+            app.deploy_github_token.clear();
             app.deploy_env_file.clear();
             app.deploy_env_vars.clear();
             app.deploy_env_key.clear();
@@ -207,6 +210,18 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
         }
         Message::SetDRun(value) => {
             app.deploy_run = value;
+            Task::none()
+        }
+        Message::ToggleGithub => {
+            app.deploy_use_github = !app.deploy_use_github;
+            Task::none()
+        }
+        Message::SetDGithubUrl(value) => {
+            app.deploy_github_url = value;
+            Task::none()
+        }
+        Message::SetDGithubToken(value) => {
+            app.deploy_github_token = value;
             Task::none()
         }
         Message::SetDPath(value) => {

@@ -75,19 +75,48 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
         .size(13)
         .width(Length::Fill);
 
-    let path_row = row![
-        text_input("Source directory path", &app.deploy_path)
-            .on_input(Message::SetDPath)
-            .size(13)
-            .width(Length::Fill),
-        button(text("Browse").size(12))
+    let source_toggle = row![
+        text(if app.deploy_use_github { "GitHub URL" } else { "Local Directory" })
+            .size(11)
+            .color(colors::TEXT_MUTED),
+        Space::with_width(Length::Fill),
+        button(text(if app.deploy_use_github { "Use Local Dir" } else { "Use GitHub" }).size(11))
             .style(button::secondary)
-            .on_press(Message::PickPath),
+            .on_press(Message::ToggleGithub),
     ]
-    .spacing(8);
+    .align_y(Alignment::Center);
+
+    let source_row: Element<Message> = if app.deploy_use_github {
+        column![
+            text_input("https://github.com/user/repo", &app.deploy_github_url)
+                .on_input(Message::SetDGithubUrl)
+                .size(13)
+                .width(Length::Fill),
+            Space::with_height(6),
+            text_input("GitHub token (optional, for private repos)", &app.deploy_github_token)
+                .on_input(Message::SetDGithubToken)
+                .size(13)
+                .width(Length::Fill),
+        ]
+        .spacing(0)
+        .into()
+    } else {
+        row![
+            text_input("Source directory path", &app.deploy_path)
+                .on_input(Message::SetDPath)
+                .size(13)
+                .width(Length::Fill),
+            button(text("Browse").size(12))
+                .style(button::secondary)
+                .on_press(Message::PickPath),
+        ]
+        .spacing(8)
+        .into()
+    };
 
     let env_section = deploy_env_section(app);
 
+    let use_github = app.deploy_use_github && !app.deploy_github_url.trim().is_empty();
     let deploy_btn = if app.deploy_name.trim().is_empty() {
         button(text("Enter an app name").size(14))
             .width(Length::Fill)
@@ -96,7 +125,7 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
         button(text("Select a runtime").size(14))
             .width(Length::Fill)
             .style(button::primary)
-    } else if app.deploy_path.is_empty() {
+    } else if !use_github && app.deploy_path.is_empty() {
         button(text("Select a source directory").size(14))
             .width(Length::Fill)
             .style(button::primary)
@@ -122,8 +151,10 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
         text("Run Command").size(10).color(colors::TEXT_MUTED),
         run_input,
         Space::with_height(10),
-        text("Source Directory").size(10).color(colors::TEXT_MUTED),
-        path_row,
+        text("Source").size(10).color(colors::TEXT_MUTED),
+        source_toggle,
+        Space::with_height(4),
+        source_row,
         Space::with_height(16),
         env_section,
         Space::with_height(16),

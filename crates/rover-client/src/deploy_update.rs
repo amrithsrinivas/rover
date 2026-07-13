@@ -8,7 +8,8 @@ use crate::update::{get_client, refresh_apps};
 
 /// Start a background deploy from the current deploy form values.
 pub fn submit_deploy(app: &mut RoverApp) -> Task<Message> {
-    if app.deploy_path.is_empty()
+    let use_github = app.deploy_use_github && !app.deploy_github_url.trim().is_empty();
+    if (!use_github && app.deploy_path.is_empty())
         || app.deploy_name.trim().is_empty()
         || app.deploy_runtime.is_empty()
     {
@@ -22,7 +23,21 @@ pub fn submit_deploy(app: &mut RoverApp) -> Task<Message> {
     let runtime = app.deploy_runtime.clone();
     let build_cmd = app.deploy_build.trim().to_string();
     let run_cmd = app.deploy_run.trim().to_string();
-    let source_path = app.deploy_path.clone();
+    let source_path = if app.deploy_use_github {
+        String::new()
+    } else {
+        app.deploy_path.clone()
+    };
+    let github_url = if app.deploy_use_github && !app.deploy_github_url.trim().is_empty() {
+        Some(app.deploy_github_url.trim().to_string())
+    } else {
+        None
+    };
+    let github_token = if app.deploy_use_github && !app.deploy_github_token.trim().is_empty() {
+        Some(app.deploy_github_token.trim().to_string())
+    } else {
+        None
+    };
     let env_vars = app.deploy_env_vars.clone();
     let client = get_client(app);
 
@@ -50,6 +65,8 @@ pub fn submit_deploy(app: &mut RoverApp) -> Task<Message> {
             run_cmd,
             source_path,
             env_vars,
+            github_url,
+            github_token,
         ),
     ])
 }

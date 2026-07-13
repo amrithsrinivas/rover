@@ -53,12 +53,14 @@ impl Deployer {
         }
     }
 
-    /// Deploy an app from a manifest and source archive.
+    /// Deploy an app from a manifest and source archive (or GitHub URL).
     /// Returns a receiver for streaming deploy events.
     pub async fn deploy(
         &self,
         manifest: &AppManifest,
         source_tar_gz: Vec<u8>,
+        github_url: Option<String>,
+        github_token: Option<String>,
     ) -> anyhow::Result<mpsc::Receiver<DeployEvent>> {
         let (tx, rx) = mpsc::channel(128);
 
@@ -88,6 +90,8 @@ impl Deployer {
                 &env_vars,
                 &manifest_toml,
                 source_tar_gz,
+                github_url,
+                github_token,
                 &data_dir,
                 &store,
                 &pm,
@@ -169,6 +173,8 @@ async fn run_deploy(
     env_vars: &std::collections::HashMap<String, String>,
     manifest_toml: &str,
     source_tar_gz: Vec<u8>,
+    github_url: Option<String>,
+    github_token: Option<String>,
     data_dir: &Path,
     store: &Arc<StateStore>,
     pm: &ProcessManager,
@@ -234,10 +240,29 @@ async fn run_deploy(
         manifest_toml,
     )?;
 
-    // Extract source
-    let _ = tx.send(DeployEvent::log("Extracting source...")).await;
-    extract_tar_gz(&source_tar_gz, &source_dir)?;
-    tracing::info!(app_id=%app_id, "source extracted to {}", source_dir.display());
+    // Get source: clone from GitHub or extract from tar.gz
+    if let Some(url) = &github_url {
+        let _ = tx
+            .send(DeployEvent::log(format!("Cloning from {url}...")))
+            .await;
+        let status = clone_repo(url, github_token.as_deref(), &source_dir)?;
+        if !status.success() {
+            let _ = tx
+                .send(DeployEvent::error(String::from("Git clone failed")))
+                .await;
+            store.update_app_status(app_id, "failed")?;
+            return Ok(());
+        }
+        // Remove .git directory to save space
+        let git_dir = source_dir.join(".git");
+        if git_dir.exists() {
+            let _ = std::fs::remove_dir_all(&git_dir);
+        }
+    } else {
+        let _ = tx.send(DeployEvent::log("Extracting source...")).await;
+        extract_tar_gz(&source_tar_gz, &source_dir)?;
+        tracing::info!(app_id=%app_id, "source extracted to {}", source_dir.display());
+    }
 
     // Build
     let _ = tx
@@ -331,6 +356,30 @@ fn run_build_and_stream(
     });
 
     let status = child.wait()?;
+    Ok(status)
+}
+
+/// Clone a git repository to the destination directory.
+/// For private repos, the token is injected into the URL.
+fn clone_repo(url: &str, token: Option<&str>, dest: &std::path::Path) -> anyhow::Result<std::process::ExitStatus> {
+    let clone_url = if let Some(t) = token {
+        // Inject token into https URL: https://github.com/user/repo -> https://token@github.com/user/repo
+        if let Some(rest) = url.strip_prefix("https://") {
+            format!("https://{}@{}", t, rest)
+        } else {
+            url.to_string()
+        }
+    } else {
+        url.to_string()
+    };
+
+    let status = std::process::Command::new("git")
+        .args(["clone", "--depth", "1", &clone_url])
+        .arg(dest)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .status()?;
+
     Ok(status)
 }
 
