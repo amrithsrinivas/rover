@@ -31,6 +31,13 @@ pub fn main() -> iced::Result {
         .init();
 
     iced::application(title, update::update, view::view)
+        .window(iced::window::Settings {
+            icon: iced::window::icon::from_file_data(
+                include_bytes!("../icon/icon.png"),
+                None,
+            ).ok(),
+            ..iced::window::Settings::default()
+        })
         .theme(|_| theme::rover_theme())
         .subscription(subscription)
         .window_size(Size::new(1100.0, 750.0))
@@ -97,6 +104,7 @@ fn init() -> (RoverApp, Task<Message>) {
         deploy_build: String::new(),
         deploy_run: String::new(),
         deploy_path: String::new(),
+        deploy_env_file: String::new(),
         deploy_env_vars: Vec::new(),
         deploy_env_key: String::new(),
         deploy_env_value: String::new(),
@@ -105,10 +113,9 @@ fn init() -> (RoverApp, Task<Message>) {
         expanded_deploy: None,
         confirm_delete: None,
         confirm_device_delete: None,
-        env_key: String::new(),
-        env_value: String::new(),
-        build_cmd_input: String::new(),
-        run_cmd_input: String::new(),
+        update_open: false,
+        update_build: String::new(),
+        update_run: String::new(),
         toasts: Vec::new(),
     };
 

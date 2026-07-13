@@ -46,7 +46,7 @@ tar = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 
 # --- Client ---
-iced = { version = "0.13", features = ["tokio", "system"] }
+iced = { version = "0.13", features = ["tokio", "system", "image"] }
 rfd = { version = "0.14", features = ["async-std"] }
 
 # --- Shared ---

@@ -44,7 +44,7 @@ rover/
 Install Termux from F-Droid (Google Play version is outdated), then:
 
 ```bash
-pkg update && pkg upgrade
+pkg update && pkg upgrade -y
 pkg install python3 openssl
 ```
 

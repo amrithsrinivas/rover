@@ -43,7 +43,7 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
             .size(18)
             .color(colors::TEXT)
             .width(Length::Fill),
-        button(text("✕").size(16).color(colors::TEXT_MUTED))
+        button(text("\u{2715}").size(16).color(colors::TEXT_MUTED))
             .style(button::text)
             .on_press(Message::CloseDeploy),
     ]
@@ -136,6 +136,8 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
 }
 
 fn deploy_env_section(app: &RoverApp) -> Element<'_, Message> {
+    let pill_bg = iced::Color::from_rgba(0.06, 0.06, 0.12, 0.8);
+
     let env_rows: Vec<Element<Message>> = app
         .deploy_env_vars
         .iter()
@@ -143,18 +145,43 @@ fn deploy_env_section(app: &RoverApp) -> Element<'_, Message> {
         .map(|(i, (k, v))| {
             container(
                 row![
-                    text(format!("{k}={v}")).size(12).color(colors::TEXT),
-                    Space::with_width(8),
-                    button(text("✕").size(11).color(colors::DANGER))
+                    text(k).size(12).color(colors::ACCENT),
+                    text("=").size(12).color(colors::TEXT_MUTED),
+                    container(text(v).size(12).color(colors::TEXT))
+                        .width(Length::Fill)
+                        .clip(true),
+                    button(text("\u{2715}").size(10).color(colors::TEXT_MUTED))
                         .style(button::text)
                         .on_press(Message::RemoveDEVar(i)),
                 ]
+                .spacing(4)
                 .align_y(Alignment::Center),
             )
-            .padding([2, 0])
+            .padding([4, 10])
+            .style(move |_theme| container::Style {
+                background: Some(iced::Background::Color(pill_bg)),
+                border: iced::Border {
+                    color: colors::BORDER,
+                    width: 1.0,
+                    radius: 6.0.into(),
+                },
+                ..container::Style::default()
+            })
             .into()
         })
         .collect();
+
+    let import_row = row![
+        text_input("Path to .env file", &app.deploy_env_file)
+            .on_input(Message::SetDEnvFile)
+            .size(12)
+            .width(Length::Fixed(348.0)),
+        button(text("Browse").size(12))
+            .style(button::secondary)
+            .on_press(Message::PickEnvFile),
+    ]
+    .spacing(8)
+    .align_y(Alignment::Center);
 
     let add_row = row![
         text_input("KEY", &app.deploy_env_key)
@@ -177,6 +204,8 @@ fn deploy_env_section(app: &RoverApp) -> Element<'_, Message> {
             .size(10)
             .color(colors::TEXT_MUTED),
         Space::with_height(4),
+        import_row,
+        Space::with_height(4),
         add_row,
     ]
     .spacing(0);
@@ -186,7 +215,7 @@ fn deploy_env_section(app: &RoverApp) -> Element<'_, Message> {
         col = col.push(text("None").size(11).color(colors::TEXT_MUTED));
     } else {
         for row in env_rows {
-            col = col.push(Space::with_height(2));
+            col = col.push(Space::with_height(4));
             col = col.push(row);
         }
     }

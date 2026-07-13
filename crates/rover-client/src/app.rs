@@ -59,6 +59,7 @@ pub struct RoverApp {
     pub deploy_build: String,
     pub deploy_run: String,
     pub deploy_path: String,
+    pub deploy_env_file: String,
     pub deploy_env_vars: Vec<(String, String)>,
     pub deploy_env_key: String,
     pub deploy_env_value: String,
@@ -67,10 +68,9 @@ pub struct RoverApp {
     pub expanded_deploy: Option<usize>,
     pub confirm_delete: Option<(String, String)>,
     pub confirm_device_delete: Option<usize>,
-    pub env_key: String,
-    pub env_value: String,
-    pub build_cmd_input: String,
-    pub run_cmd_input: String,
+    pub update_open: bool,
+    pub update_build: String,
+    pub update_run: String,
     pub toasts: Vec<ToastState>,
 }
 

@@ -97,6 +97,12 @@ pub enum Message {
     AddDEVar,
     /// Remove env var from deploy list by index.
     RemoveDEVar(usize),
+    /// Set the path to a .env file to import.
+    SetDEnvFile(String),
+    /// Open file picker for .env file.
+    PickEnvFile,
+    /// .env file picked via Browse: (path, parsed vars).
+    EnvFilePicked(String, Vec<(String, String)>),
     /// Submit deploy.
     SubmitDeploy,
     /// Background deploy status changed: (deploy_id, status).
@@ -112,21 +118,18 @@ pub enum Message {
     /// Clear completed and failed deploy cards.
     ClearFinishedDeploys,
 
-    // --- Env vars on app detail ---
-    /// Env var key input.
-    SetEKey(String),
-    /// Env var value input.
-    SetEValue(String),
-    /// Add env var to running app.
-    AddEnv,
-
-    // --- Update app commands ---
-    /// Build command input on detail screen.
-    SetBuildCmd(String),
-    /// Run command input on detail screen.
-    SetRunCmd(String),
-    /// Submit updated commands to server (stop + restart if running).
-    UpdateApp(String),
+    // --- Update app commands modal ---
+    /// Open the update commands modal with the app_id.
+    /// Prefills build/run from current detail.
+    OpenUpdate(String),
+    /// Close the update commands modal.
+    CloseUpdate,
+    /// Build command input in the update modal.
+    SetUpdateBuild(String),
+    /// Run command input in the update modal.
+    SetUpdateRun(String),
+    /// Submit the update (sends to server, stop + restart if running).
+    ConfirmUpdate(String),
 
     // --- Toast notifications ---
     /// Show an informational toast.

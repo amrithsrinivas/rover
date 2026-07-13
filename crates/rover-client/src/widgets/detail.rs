@@ -57,22 +57,27 @@ pub fn app_detail(app: &RoverApp) -> Element<'_, Message> {
 
     let commands_section = column![
         text("Build Command").size(10).color(colors::TEXT_MUTED),
-        text_input("build command", &app.build_cmd_input)
-            .on_input(Message::SetBuildCmd)
-            .size(12),
+        text(&detail.build_command)
+            .size(11)
+            .color(colors::TEXT_MUTED),
         Space::with_height(6),
         text("Run Command").size(10).color(colors::TEXT_MUTED),
-        text_input("run command", &app.run_cmd_input)
-            .on_input(Message::SetRunCmd)
-            .size(12),
+        text(&detail.run_command).size(11).color(colors::TEXT_MUTED),
         Space::with_height(8),
-        button(text("Update & Restart").size(13))
+        button(text("Update Commands").size(13))
             .style(button::primary)
-            .on_press(Message::UpdateApp(detail.app_id.clone())),
+            .on_press(Message::OpenUpdate(detail.app_id.clone())),
     ]
     .spacing(2);
 
     let actions = action_buttons(&detail.app_id);
+
+    // --- Update commands modal ---
+    let update_modal = if app.update_open {
+        Some(update_modal_content(app))
+    } else {
+        None
+    };
 
     let delete_modal = app.confirm_delete.as_ref().map(|(app_id, name)| {
         container(
@@ -107,24 +112,43 @@ pub fn app_detail(app: &RoverApp) -> Element<'_, Message> {
         })
     });
 
+    // Build the base content
+    let base = column![
+        header,
+        Space::with_height(12),
+        info_section,
+        Space::with_height(12),
+        commands_section,
+        Space::with_height(16),
+        actions,
+        Space::with_height(20),
+        logs_section(app),
+    ]
+    .spacing(0)
+    .padding(24);
+
     let content: Element<Message> = if let Some(modal) = delete_modal {
         iced::widget::stack([
-            column![
-                header,
-                Space::with_height(12),
-                info_section,
-                Space::with_height(12),
-                commands_section,
-                Space::with_height(16),
-                actions,
-                Space::with_height(20),
-                env_section(app),
-                Space::with_height(20),
-                logs_section(app),
-            ]
-            .spacing(0)
-            .padding(24)
+            base.into(),
+            container(
+                container(modal)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill),
+            )
+            .style(|_theme| container::Style {
+                background: Some(iced::Background::Color(iced::Color::from_rgba(
+                    0.0, 0.0, 0.0, 0.6,
+                ))),
+                ..container::Style::default()
+            })
+            .width(Length::Fill)
+            .height(Length::Fill)
             .into(),
+        ])
+        .into()
+    } else if let Some(modal) = update_modal {
+        iced::widget::stack([
+            base.into(),
             container(
                 container(modal)
                     .center_x(Length::Fill)
@@ -142,25 +166,59 @@ pub fn app_detail(app: &RoverApp) -> Element<'_, Message> {
         ])
         .into()
     } else {
-        column![
-            header,
-            Space::with_height(12),
-            info_section,
-            Space::with_height(12),
-            commands_section,
-            Space::with_height(16),
-            actions,
-            Space::with_height(20),
-            env_section(app),
-            Space::with_height(20),
-            logs_section(app),
-        ]
-        .spacing(0)
-        .padding(24)
-        .into()
+        base.into()
     };
 
     scrollable(content).height(Length::Fill).into()
+}
+
+/// Render the update commands modal.
+fn update_modal_content<'a>(app: &RoverApp) -> Element<'a, Message> {
+    let app_id = match &app.app_detail {
+        Some(d) => d.app_id.clone(),
+        None => String::new(),
+    };
+
+    container(
+        column![
+            text("Update Commands").size(18).color(colors::TEXT),
+            Space::with_height(16),
+            text("Build Command").size(10).color(colors::TEXT_MUTED),
+            Space::with_height(4),
+            text_input("build command", &app.update_build)
+                .on_input(Message::SetUpdateBuild)
+                .size(13),
+            Space::with_height(12),
+            text("Run Command").size(10).color(colors::TEXT_MUTED),
+            Space::with_height(4),
+            text_input("run command", &app.update_run)
+                .on_input(Message::SetUpdateRun)
+                .size(13),
+            Space::with_height(20),
+            row![
+                button(text("Cancel").size(13))
+                    .style(button::secondary)
+                    .on_press(Message::CloseUpdate),
+                Space::with_width(8),
+                button(text("Update Commands").size(13))
+                    .style(button::primary)
+                    .on_press(Message::ConfirmUpdate(app_id)),
+            ]
+            .spacing(0),
+        ]
+        .padding(24)
+        .width(Length::Fixed(480.0)),
+    )
+    .style(|_theme| container::Style {
+        background: Some(iced::Background::Color(colors::ELEVATED)),
+        border: iced::Border {
+            color: colors::BORDER,
+            width: 1.0,
+            radius: 12.0.into(),
+        },
+        ..container::Style::default()
+    })
+    .into()
 }
 
 fn status_badge<'a>(label: &'a str, color: iced::Color) -> Element<'a, Message> {
@@ -202,68 +260,6 @@ fn action_buttons<'a>(app_id: &str) -> Element<'a, Message> {
     .into()
 }
 
-fn env_section(app: &RoverApp) -> Element<'_, Message> {
-    let detail = match &app.app_detail {
-        Some(d) => d,
-        None => return text("").into(),
-    };
-
-    let env_vars: Vec<Element<Message>> = detail
-        .env_vars
-        .iter()
-        .map(|(k, v)| {
-            container(
-                row![
-                    text(k).size(12).color(colors::ACCENT),
-                    text("=").size(12).color(colors::TEXT_MUTED),
-                    text(v).size(12).color(colors::TEXT),
-                ]
-                .spacing(4),
-            )
-            .padding(4)
-            .into()
-        })
-        .collect();
-
-    let add_form = row![
-        text_input("KEY", &app.env_key)
-            .on_input(Message::SetEKey)
-            .size(12)
-            .width(Length::Fixed(140.0)),
-        text_input("VALUE", &app.env_value)
-            .on_input(Message::SetEValue)
-            .size(12)
-            .width(Length::Fixed(200.0)),
-        button(text("+ Add").size(12))
-            .style(button::primary)
-            .on_press(Message::AddEnv),
-    ]
-    .spacing(8)
-    .align_y(Alignment::Center);
-
-    let mut col = column![
-        text("Environment").size(14).color(colors::TEXT_MUTED),
-        Space::with_height(4),
-        add_form,
-    ]
-    .spacing(0);
-
-    if env_vars.is_empty() {
-        col = col.push(Space::with_height(4));
-        col = col.push(
-            text("No environment variables set")
-                .size(11)
-                .color(colors::TEXT_MUTED),
-        );
-    } else {
-        for v in env_vars {
-            col = col.push(Space::with_height(2));
-            col = col.push(v);
-        }
-    }
-
-    col.into()
-}
 
 fn logs_section(app: &RoverApp) -> Element<'_, Message> {
     let log_lines: Vec<Element<Message>> = app

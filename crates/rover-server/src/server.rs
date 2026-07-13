@@ -419,7 +419,8 @@ impl AppService for RoverServer {
         let req = request.into_inner();
         let app_id = &req.app_id;
 
-        let app = self
+        // Verify app exists
+        let _ = self
             .store
             .get_app(app_id)
             .map_err(|e| Status::internal(e.to_string()))?
@@ -433,41 +434,6 @@ impl AppService for RoverServer {
                 req.run_command.as_deref(),
             )
             .map_err(|e| Status::internal(e.to_string()))?;
-
-        // If the app was running, stop and restart with new commands
-        if app.status == "running" {
-            self.process_manager
-                .stop(app_id)
-                .await
-                .map_err(|e| Status::internal(e.to_string()))?;
-
-            // Re-read to get updated commands
-            let updated = self
-                .store
-                .get_app(app_id)
-                .map_err(|e| Status::internal(e.to_string()))?
-                .ok_or_else(|| Status::not_found("app vanished during update"))?;
-
-            let env_vars: std::collections::HashMap<_, _> = self
-                .store
-                .get_env_vars(app_id)
-                .map_err(|e| Status::internal(e.to_string()))?
-                .into_iter()
-                .map(|v| (v.key, v.value))
-                .collect();
-
-            let (program, args) = crate::process::parse_shell_command(&updated.run_command);
-            let source_dir = std::path::PathBuf::from(&updated.source_dir);
-
-            self.process_manager
-                .spawn(app_id, &program, &args, &env_vars, &source_dir)
-                .await
-                .map_err(|e| Status::internal(e.to_string()))?;
-
-            self.store
-                .update_app_status(app_id, "running")
-                .map_err(|e| Status::internal(e.to_string()))?;
-        }
 
         // Return fresh detail
         let updated = self

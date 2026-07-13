@@ -180,13 +180,12 @@ fn check_pid_alive(_pid: u32) -> bool {
 }
 
 pub fn parse_shell_command(command: &str) -> (String, Vec<String>) {
-    let parts: Vec<&str> = command.split_whitespace().collect();
-    if parts.is_empty() {
+    if command.trim().is_empty() {
         return (String::new(), vec![]);
     }
     (
-        parts[0].to_string(),
-        parts[1..].iter().map(|s| s.to_string()).collect(),
+        "sh".to_string(),
+        vec!["-c".to_string(), command.to_string()],
     )
 }
 
@@ -197,9 +196,9 @@ mod tests {
 
     #[test]
     fn test_parse_shell_command() {
-        let (p, a) = parse_shell_command("python main.py --flag");
-        assert_eq!(p, "python");
-        assert_eq!(a, vec!["main.py", "--flag"]);
+        let (p, a) = parse_shell_command("echo hello");
+        assert_eq!(p, "sh");
+        assert_eq!(a, vec!["-c", "echo hello"]);
     }
 
     #[test]

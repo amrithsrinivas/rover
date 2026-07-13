@@ -142,10 +142,7 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             fetch_detail(app, &app_id)
         }
         Message::Detail(detail) => {
-            let d = *detail;
-            app.build_cmd_input = d.build_command.clone();
-            app.run_cmd_input = d.run_command.clone();
-            app.app_detail = Some(d);
+            app.app_detail = Some(*detail);
             Task::none()
         }
         Message::Logs(lines) => {
@@ -182,6 +179,7 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             app.deploy_build.clear();
             app.deploy_run.clear();
             app.deploy_path.clear();
+            app.deploy_env_file.clear();
             app.deploy_env_vars.clear();
             app.deploy_env_key.clear();
             app.deploy_env_value.clear();
@@ -215,6 +213,50 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             app.deploy_path = value;
             Task::none()
         }
+        Message::SetDEnvFile(value) => {
+            app.deploy_env_file = value;
+            Task::none()
+        }
+        Message::PickEnvFile => Task::perform(
+            async {
+                rfd::AsyncFileDialog::new()
+                    .pick_file()
+                    .await
+                    .map(|handle| handle.path().to_string_lossy().to_string())
+                    .and_then(|path| {
+                        std::fs::read_to_string(&path).ok().map(|contents| {
+                            let vars: Vec<(String, String)> = contents
+                                .lines()
+                                .filter_map(|line| {
+                                    let line = line.trim();
+                                    if line.is_empty() || line.starts_with('#') {
+                                        return None;
+                                    }
+                                    let (k, v) = line.split_once('=')?;
+                                    Some((k.trim().to_string(), v.trim().to_string()))
+                                })
+                                .collect();
+                            (path, vars)
+                        })
+                    })
+            },
+            |result| match result {
+                Some((path, vars)) => Message::EnvFilePicked(path, vars),
+                None => Message::Noop,
+            },
+        ),
+        Message::EnvFilePicked(path, vars) => {
+            app.deploy_env_file = path;
+            let count = vars.len();
+            for (k, v) in vars {
+                app.deploy_env_vars.push((k, v));
+            }
+            app.toasts = vec![ToastState {
+                message: format!("Imported {count} env vars"),
+                kind: ToastKind::Info,
+            }];
+            Task::none()
+        },
         Message::PickPath => Task::perform(
             async {
                 rfd::AsyncFileDialog::new()
@@ -251,6 +293,8 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             }
             Task::none()
         }
+
+
         Message::SubmitDeploy => crate::deploy_update::submit_deploy(app),
         Message::DeployStatus(deploy_id, status) => {
             if let Some(deploy) = app.find_deploy_mut(deploy_id) {
@@ -290,30 +334,35 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             Task::none()
         }
 
-        Message::SetEKey(value) => {
-            app.env_key = value;
+        // --- Update commands modal ---
+        Message::OpenUpdate(_app_id) => {
+            // Prefill from current detail
+            if let Some(detail) = &app.app_detail {
+                app.update_build = detail.build_command.clone();
+                app.update_run = detail.run_command.clone();
+            }
+            app.update_open = true;
             Task::none()
         }
-        Message::SetEValue(value) => {
-            app.env_value = value;
+        Message::CloseUpdate => {
+            app.update_open = false;
             Task::none()
         }
-        Message::AddEnv => add_env(app),
-
-        Message::SetBuildCmd(value) => {
-            app.build_cmd_input = value;
+        Message::SetUpdateBuild(value) => {
+            app.update_build = value;
             Task::none()
         }
-        Message::SetRunCmd(value) => {
-            app.run_cmd_input = value;
+        Message::SetUpdateRun(value) => {
+            app.update_run = value;
             Task::none()
         }
-        Message::UpdateApp(app_id) => {
+        Message::ConfirmUpdate(app_id) => {
+            app.update_open = false;
             let client = get_client(app);
             let aid = app_id;
             let dev_name = active_device_name(app);
-            let build = app.build_cmd_input.trim().to_string();
-            let run = app.run_cmd_input.trim().to_string();
+            let build = app.update_build.trim().to_string();
+            let run = app.update_run.trim().to_string();
             Task::perform(
                 async move {
                     if let Some(client) = client {
@@ -473,39 +522,6 @@ fn confirm_delete_app(app: &RoverApp, app_id: String) -> Task<Message> {
     )
 }
 
-fn add_env(app: &mut RoverApp) -> Task<Message> {
-    let key = app.env_key.trim().to_string();
-    let value = app.env_value.trim().to_string();
-    if key.is_empty() {
-        return Task::none();
-    }
-    let app_id = match &app.selected_app {
-        Some(id) => id.clone(),
-        None => return Task::none(),
-    };
-    let client = get_client(app);
-    let dev_name = active_device_name(app);
-    Task::perform(
-        async move {
-            if let Some(client) = client {
-                let mut client = client.lock().await;
-                let mut vars = std::collections::HashMap::new();
-                vars.insert(key, value);
-                client
-                    .set_env(&app_id, vars)
-                    .await
-                    .map_err(|e| e.to_string())
-            } else {
-                Err("Not connected".into())
-            }
-        },
-        move |result| match result {
-            Ok(detail) => Message::Detail(Box::new(detail)),
-            Err(e) => Message::Toast(format!("{dev_name}: {e}")),
-        },
-    )
-}
-
 pub(crate) fn get_client(app: &RoverApp) -> Option<ClientRef> {
     app.devices
         .get(app.active)
@@ -607,11 +623,17 @@ fn fetch_logs(app: &RoverApp, app_id: &str) -> Task<Message> {
                     .map_err(|e| e.to_string())?;
                 let mut lines = Vec::new();
                 while let Some(Ok(entry)) = stream.next().await {
-                    if entry.is_stderr {
-                        lines.push(format!("[err] {}", entry.line));
-                    } else {
-                        lines.push(entry.line.clone());
-                    }
+                    let ts = entry.timestamp.map_or_else(
+                        || String::from("--:--:--"),
+                        |t| {
+                            let secs = t.millis / 1000;
+                            let h = (secs / 3600) % 24;
+                            let m = (secs / 60) % 60;
+                            let s = secs % 60;
+                            format!("{h:02}:{m:02}:{s:02}")
+                        },
+                    );
+                    lines.push(format!("{ts} {}", entry.line));
                     if lines.len() >= 100 {
                         break;
                     }
