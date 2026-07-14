@@ -31,13 +31,9 @@ struct Cli {
     #[arg(long)]
     bore: bool,
 
-    /// Bore server address (default: bore.pub:7835)
+    /// Bore server address (default: bore.pub)
     #[arg(long, default_value = "bore.pub")]
     bore_server: String,
-
-    /// Bore server port (default: 7835)
-    #[arg(long, default_value_t = 7835)]
-    bore_port: u16,
 
     /// Bore authentication secret
     #[arg(long)]
@@ -116,7 +112,6 @@ async fn main() -> anyhow::Result<()> {
     if cli.bore {
         let bore_config = bore::BoreConfig {
             server_host: cli.bore_server,
-            server_port: cli.bore_port,
             secret: cli.bore_secret,
             local_port: cli.port,
         };
