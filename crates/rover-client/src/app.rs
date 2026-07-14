@@ -74,6 +74,8 @@ pub struct RoverApp {
     pub expanded_deploy: Option<usize>,
     pub confirm_delete: Option<(String, String)>,
     pub confirm_device_delete: Option<usize>,
+    pub editing_device: Option<usize>,
+    pub rename_value: String,
     pub update_open: bool,
     pub update_build: String,
     pub update_run: String,

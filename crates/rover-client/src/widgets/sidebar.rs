@@ -61,21 +61,40 @@ fn device_row<'a>(app: &'a RoverApp, i: usize, d: &'a DeviceState) -> Element<'a
         text("○").color(colors::TEXT_MUTED).size(11)
     };
 
-    let label = column![
-        text(&d.profile.name).size(13).color(colors::TEXT),
-        text(&d.profile.address).size(10).color(colors::TEXT_MUTED),
-    ]
-    .spacing(2);
+    let edit_icon = button(text("\u{270E}").size(10).color(colors::TEXT_MUTED))
+        .style(button::text)
+        .on_press(Message::StartRename(i));
 
-    // Delete button (only show on hover or for disconnected devices)
-    let delete_btn = button(text("✕").size(10).color(colors::DANGER))
+    let label: Element<Message> = if app.editing_device == Some(i) {
+        text_input("name", &app.rename_value)
+            .on_input(Message::SetRenameValue)
+            .on_submit(Message::ConfirmRename(i))
+            .size(13)
+            .padding(4)
+            .into()
+    } else {
+        column![
+            text(&d.profile.name).size(13).color(colors::TEXT),
+            text(&d.profile.address).size(10).color(colors::TEXT_MUTED),
+        ]
+        .spacing(2)
+        .into()
+    };
+
+    let delete_btn = button(text("\u{2715}").size(10).color(colors::DANGER))
         .style(button::text)
         .on_press(Message::DeleteDevice(i));
 
-    let row_content = row![dot, label, Space::with_width(Length::Fill), delete_btn]
-        .spacing(8)
-        .align_y(Alignment::Center)
-        .padding(10);
+    let row_content = row![
+        dot,
+        label,
+        Space::with_width(Length::Fill),
+        edit_icon,
+        delete_btn
+    ]
+    .spacing(8)
+    .align_y(Alignment::Center)
+    .padding(10);
 
     let is_active = i == app.active;
 

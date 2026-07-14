@@ -1,47 +1,33 @@
 [package]
-name = "rover-server"
+name = "rover-client-v2"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [[bin]]
-name = "roverd"
+name = "rover"
 path = "src/main.rs"
 
 [dependencies]
 rover-core.workspace = true
 rover-proto.workspace = true
-rover-transport.workspace = true
-rover-transport-lan.workspace = true
-rover-transport-relay.workspace = true
 
 tokio.workspace = true
 tokio-stream.workspace = true
 tonic.workspace = true
-tonic-reflection = "0.12"
 prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
-rusqlite.workspace = true
-clap.workspace = true
-uuid.workspace = true
-sha2.workspace = true
-rand.workspace = true
-sysinfo.workspace = true
 flate2.workspace = true
 tar.workspace = true
+uuid.workspace = true
 chrono.workspace = true
-async-trait.workspace = true
-thiserror.workspace = true
+iced.workspace = true
+rfd.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true
-bore-cli.workspace = true
-libc = "0.2"
-tower = "0.5"
-pin-project = "1"
-
-[dev-dependencies]
-tempfile = "3"
+lucide-icons = { workspace = true, features = ["iced"] }

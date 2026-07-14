@@ -76,29 +76,34 @@ fn deploy_form(app: &RoverApp) -> Element<'_, Message> {
         .width(Length::Fill);
 
     let source_toggle = row![
-        text(if app.deploy_use_github { "GitHub URL" } else { "Local Directory" })
-            .size(11)
-            .color(colors::TEXT_MUTED),
+        text(if app.deploy_use_github {
+            "GitHub URL"
+        } else {
+            "Local Directory"
+        })
+        .size(11)
+        .color(colors::TEXT_MUTED),
         Space::with_width(Length::Fill),
-        button(text(if app.deploy_use_github { "Use Local Dir" } else { "Use GitHub" }).size(11))
-            .style(button::secondary)
-            .on_press(Message::ToggleGithub),
+        button(
+            text(if app.deploy_use_github {
+                "Use Local Dir"
+            } else {
+                "Use GitHub"
+            })
+            .size(11)
+        )
+        .style(button::secondary)
+        .on_press(Message::ToggleGithub),
     ]
     .align_y(Alignment::Center);
 
     let source_row: Element<Message> = if app.deploy_use_github {
-        let token_labels: Vec<String> = app
-            .github_tokens
-            .iter()
-            .map(|t| t.label.clone())
-            .collect();
+        let token_labels: Vec<String> = app.github_tokens.iter().map(|t| t.label.clone()).collect();
 
         let token_row = row![
-            pick_list(
-                token_labels,
-                app.selected_github_token.clone(),
-                |s| Message::SelectGithubToken(Some(s)),
-            )
+            pick_list(token_labels, app.selected_github_token.clone(), |s| {
+                Message::SelectGithubToken(Some(s))
+            },)
             .placeholder("No token (public repo)")
             .width(Length::Fill),
             button(text("\u{2715}").size(11).color(colors::TEXT_MUTED))

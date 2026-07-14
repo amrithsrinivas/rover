@@ -260,7 +260,6 @@ fn action_buttons<'a>(app_id: &str) -> Element<'a, Message> {
     .into()
 }
 
-
 fn logs_section(app: &RoverApp) -> Element<'_, Message> {
     let log_lines: Vec<Element<Message>> = app
         .log_entries

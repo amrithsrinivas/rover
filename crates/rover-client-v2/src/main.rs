@@ -1,10 +1,7 @@
 mod api;
 mod app;
-mod deploy_job;
-mod deploy_update;
-mod github_tokens;
 mod message;
-mod state;
+mod screens;
 mod theme;
 mod update;
 mod view;
@@ -13,15 +10,13 @@ mod widgets;
 use std::sync::Arc;
 use std::time::Duration;
 
-use iced::{Size, Subscription, Task};
+use iced::{Settings, Size, Subscription, Task};
 use tokio::sync::Mutex;
 
 use api::client::RoverClient;
+use app::{RoverApp, Screen, ServerState};
 use message::Message;
 use rover_core::ConnectionProfileStore;
-use state::DeviceState;
-
-pub use app::{DeployState, RoverApp, ToastKind, ToastState};
 
 pub fn main() -> iced::Result {
     tracing_subscriber::fmt()
@@ -36,6 +31,10 @@ pub fn main() -> iced::Result {
             icon: iced::window::icon::from_file_data(include_bytes!("../icon/icon.png"), None).ok(),
             ..iced::window::Settings::default()
         })
+        .settings(Settings {
+            fonts: vec![lucide_icons::LUCIDE_FONT_BYTES.into()],
+            ..Settings::default()
+        })
         .theme(|_| theme::rover_theme())
         .subscription(subscription)
         .window_size(Size::new(1100.0, 750.0))
@@ -43,29 +42,32 @@ pub fn main() -> iced::Result {
 }
 
 fn title(app: &RoverApp) -> String {
-    if let Some(device) = app.devices.get(app.active) {
-        if device.connected {
-            return format!("Rover — {}", device.profile.name);
-        }
+    let connected = app.connected_count();
+    if connected > 0 {
+        format!(
+            "Rover — {connected} server{}",
+            if connected > 1 { "s" } else { "" }
+        )
+    } else {
+        "Rover".into()
     }
-    "Rover".into()
 }
 
 fn init() -> (RoverApp, Task<Message>) {
     let store = ConnectionProfileStore::load_from_disk().unwrap_or_default();
-    let devices: Vec<DeviceState> = store
+    let servers: Vec<ServerState> = store
         .profiles
         .into_iter()
-        .map(DeviceState::from_profile)
+        .map(ServerState::from_profile)
         .collect();
-    let show_add = devices.is_empty();
+    let show_add = servers.is_empty();
 
-    let tasks: Vec<Task<Message>> = devices
+    let connect_tasks: Vec<Task<Message>> = servers
         .iter()
         .enumerate()
-        .filter_map(|(idx, device)| {
-            device.profile.api_key.as_ref().map(|key| {
-                let addr = device.profile.address.clone();
+        .filter_map(|(idx, server)| {
+            server.profile.api_key.as_ref().map(|key| {
+                let addr = server.profile.address.clone();
                 let key = key.clone();
                 Task::perform(
                     async move {
@@ -77,8 +79,8 @@ fn init() -> (RoverApp, Task<Message>) {
                         Ok(Arc::new(Mutex::new(client)))
                     },
                     move |result| match result {
-                        Ok(client) => Message::DevConnected(idx, Some(client)),
-                        Err(e) => Message::DevError(idx, e),
+                        Ok(client) => Message::ServerConnected(idx, Some(client)),
+                        Err(e) => Message::ServerError(idx, e),
                     },
                 )
             })
@@ -86,17 +88,20 @@ fn init() -> (RoverApp, Task<Message>) {
         .collect();
 
     let app = RoverApp {
-        devices,
-        active: 0,
-        show_add,
-        addr: String::new(),
-        token: String::new(),
-        name: String::new(),
-        error: None,
-        selected_app: None,
+        servers,
+        all_apps: Vec::new(),
+        show_add_form: show_add,
+        show_manage_servers: false,
+        addr_input: String::new(),
+        token_input: String::new(),
+        name_input: String::new(),
+        form_error: None,
+        screen: Screen::Connect,
         app_detail: None,
+        app_detail_server: 0,
         log_entries: Vec::new(),
         deploy_open: false,
+        deploy_target: None,
         deploy_name: String::new(),
         deploy_runtime: String::new(),
         deploy_build: String::new(),
@@ -104,20 +109,19 @@ fn init() -> (RoverApp, Task<Message>) {
         deploy_path: String::new(),
         deploy_use_github: false,
         deploy_github_url: String::new(),
-        github_tokens: github_tokens::GithubTokenStore::load().tokens,
+        github_tokens: update::load_github_tokens(),
         selected_github_token: None,
         new_token_label: String::new(),
         new_token_value: String::new(),
-        deploy_env_file: String::new(),
         deploy_env_vars: Vec::new(),
         deploy_env_key: String::new(),
         deploy_env_value: String::new(),
         next_deploy_id: 1,
-        active_deploys: Vec::new(),
+        deploy_jobs: Vec::new(),
         expanded_deploy: None,
         confirm_delete: None,
-        confirm_device_delete: None,
-        editing_device: None,
+        confirm_server_delete: None,
+        editing_server: None,
         rename_value: String::new(),
         update_open: false,
         update_build: String::new(),
@@ -125,7 +129,7 @@ fn init() -> (RoverApp, Task<Message>) {
         toasts: Vec::new(),
     };
 
-    (app, Task::batch(tasks))
+    (app, Task::batch(connect_tasks))
 }
 
 fn subscription(_app: &RoverApp) -> Subscription<Message> {

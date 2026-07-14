@@ -35,7 +35,10 @@ pub fn submit_deploy(app: &mut RoverApp) -> Task<Message> {
     };
     let github_token = if app.deploy_use_github {
         app.selected_github_token.as_ref().and_then(|label| {
-            app.github_tokens.iter().find(|t| &t.label == label).map(|t| t.token.clone())
+            app.github_tokens
+                .iter()
+                .find(|t| &t.label == label)
+                .map(|t| t.token.clone())
         })
     } else {
         None

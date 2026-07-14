@@ -361,7 +361,11 @@ fn run_build_and_stream(
 
 /// Clone a git repository to the destination directory.
 /// For private repos, the token is injected into the URL.
-fn clone_repo(url: &str, token: Option<&str>, dest: &std::path::Path) -> anyhow::Result<std::process::ExitStatus> {
+fn clone_repo(
+    url: &str,
+    token: Option<&str>,
+    dest: &std::path::Path,
+) -> anyhow::Result<std::process::ExitStatus> {
     let clone_url = if let Some(t) = token {
         // Inject token into https URL: https://github.com/user/repo -> https://token@github.com/user/repo
         if let Some(rest) = url.strip_prefix("https://") {

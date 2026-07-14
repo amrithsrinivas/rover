@@ -205,19 +205,20 @@ async fn package_source(path: &str) -> Result<Vec<u8>, String> {
     ];
 
     // Suffixes to always exclude (catches *.sqlite, *.db, *.duckdb, *.env, etc.)
-    let always_ignore_suffix: &[&str] = &[
-        ".sqlite",
-        ".sqlite3",
-        ".db",
-        ".duckdb",
-        ".env",
-    ];
+    let always_ignore_suffix: &[&str] = &[".sqlite", ".sqlite3", ".db", ".duckdb", ".env"];
 
     let mut archive = tar::Builder::new(Vec::new());
     let root_rules = parse_gitignore(path);
     let base = path.to_path_buf();
 
-    walk(&base, &base, &mut archive, always_ignore, always_ignore_suffix, &root_rules)?;
+    walk(
+        &base,
+        &base,
+        &mut archive,
+        always_ignore,
+        always_ignore_suffix,
+        &root_rules,
+    )?;
 
     let tar_bytes = archive
         .into_inner()
@@ -288,7 +289,11 @@ fn parse_gitignore(dir: &std::path::Path) -> GitignoreRules {
             continue;
         }
         let negated = trimmed.starts_with('!');
-        let effective = if negated { trimmed[1..].trim() } else { trimmed };
+        let effective = if negated {
+            trimmed[1..].trim()
+        } else {
+            trimmed
+        };
         // Remove leading slash for root-only patterns
         let effective = effective.strip_prefix('/').unwrap_or(effective);
 
@@ -348,7 +353,14 @@ fn walk(
             archive
                 .append_data(&mut header, dir_path, &mut std::io::empty())
                 .map_err(|e| format!("tar append dir error: {e}"))?;
-            walk(&path, base, archive, always_ignore, always_ignore_suffix, parent_rules)?;
+            walk(
+                &path,
+                base,
+                archive,
+                always_ignore,
+                always_ignore_suffix,
+                parent_rules,
+            )?;
         } else if path.is_file() {
             let data = std::fs::read(&path).map_err(|e| format!("read file: {e}"))?;
             let mut header = tar::Header::new_gnu();

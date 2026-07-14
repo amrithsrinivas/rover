@@ -102,6 +102,34 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             app.log_entries.clear();
             Task::none()
         }
+        Message::StartRename(idx) => {
+            if let Some(device) = app.devices.get(idx) {
+                app.rename_value = device.profile.name.clone();
+                app.editing_device = Some(idx);
+            }
+            Task::none()
+        }
+        Message::SetRenameValue(value) => {
+            app.rename_value = value;
+            Task::none()
+        }
+        Message::ConfirmRename(idx) => {
+            let new_name = app.rename_value.trim().to_string();
+            if !new_name.is_empty() && idx < app.devices.len() {
+                app.devices[idx].profile.name = new_name.clone();
+                let mut store = ConnectionProfileStore::load_from_disk().unwrap_or_default();
+                store.upsert(app.devices[idx].profile.clone());
+                let _ = store.save_to_disk();
+            }
+            app.editing_device = None;
+            app.rename_value.clear();
+            Task::none()
+        }
+        Message::CancelRename => {
+            app.editing_device = None;
+            app.rename_value.clear();
+            Task::none()
+        }
         Message::DeleteDevice(idx) => {
             if app.devices.get(idx).is_some() {
                 app.confirm_device_delete = Some(idx);
@@ -294,7 +322,7 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
                 kind: ToastKind::Info,
             }];
             Task::none()
-        },
+        }
         Message::PickPath => Task::perform(
             async {
                 rfd::AsyncFileDialog::new()
@@ -331,7 +359,6 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             }
             Task::none()
         }
-
 
         Message::SubmitDeploy => crate::deploy_update::submit_deploy(app),
         Message::DeployStatus(deploy_id, status) => {

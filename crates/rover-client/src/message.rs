@@ -39,6 +39,14 @@ pub enum Message {
     Disconnect,
     /// Show delete confirmation for a device profile.
     DeleteDevice(usize),
+    /// Start renaming a device.
+    StartRename(usize),
+    /// Rename text input.
+    SetRenameValue(String),
+    /// Confirm rename.
+    ConfirmRename(usize),
+    /// Cancel rename.
+    CancelRename,
     /// Dismiss device delete confirmation.
     CancelDeleteDevice,
     /// Execute device deletion: index.

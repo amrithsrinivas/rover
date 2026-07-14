@@ -7,6 +7,7 @@ members = [
     "crates/rover-transport-relay",
     "crates/rover-server",
     "crates/rover-client",
+    "crates/rover-client-v2",
 ]
 
 resolver = "2"
@@ -44,10 +45,14 @@ sysinfo = "0.32"
 flate2 = "1"
 tar = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
+bore-cli = "0.6"
 
 # --- Client ---
 iced = { version = "0.13", features = ["tokio", "system", "image"] }
 rfd = { version = "0.14", features = ["async-std"] }
+
+# --- Client v2 ---
+lucide-icons = "1"
 
 # --- Shared ---
 async-trait = "0.1"
@@ -62,3 +67,4 @@ rover-proto = { path = "crates/rover-proto" }
 rover-transport = { path = "crates/rover-transport" }
 rover-transport-lan = { path = "crates/rover-transport-lan" }
 rover-transport-relay = { path = "crates/rover-transport-relay" }
+rover-client-v2 = { path = "crates/rover-client-v2" }

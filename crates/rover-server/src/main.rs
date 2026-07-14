@@ -1,4 +1,5 @@
 mod auth;
+mod bore;
 mod deploy;
 mod health;
 mod metrics;
@@ -25,6 +26,22 @@ struct Cli {
     /// Data directory for state, apps, and logs
     #[arg(long)]
     data_dir: Option<PathBuf>,
+
+    /// Enable bore tunneling to expose the server to the internet
+    #[arg(long)]
+    bore: bool,
+
+    /// Bore server address (default: bore.pub:7835)
+    #[arg(long, default_value = "bore.pub")]
+    bore_server: String,
+
+    /// Bore server port (default: 7835)
+    #[arg(long, default_value_t = 7835)]
+    bore_port: u16,
+
+    /// Bore authentication secret
+    #[arg(long)]
+    bore_secret: Option<String>,
 }
 
 fn default_data_dir() -> PathBuf {
@@ -94,6 +111,28 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         health_checker.run().await;
     });
+
+    // Start bore tunnel if enabled
+    if cli.bore {
+        let bore_config = bore::BoreConfig {
+            server_host: cli.bore_server,
+            server_port: cli.bore_port,
+            secret: cli.bore_secret,
+            local_port: cli.port,
+        };
+        match bore::start_tunnel(bore_config).await {
+            Ok(tunnel) => {
+                tracing::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                tracing::info!("Public address: {}", tunnel.public_address());
+                tracing::info!("Use this address to connect from the Rover client");
+                tracing::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            }
+            Err(e) => {
+                tracing::warn!("Failed to establish bore tunnel: {e}");
+                tracing::warn!("Server will continue without public access");
+            }
+        }
+    }
 
     // Start gRPC server
     server::start(
