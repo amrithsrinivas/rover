@@ -6,7 +6,6 @@ members = [
     "crates/rover-transport-lan",
     "crates/rover-transport-relay",
     "crates/rover-server",
-    "crates/rover-client",
     "crates/rover-client-v2",
 ]
 

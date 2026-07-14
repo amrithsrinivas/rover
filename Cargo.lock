@@ -3704,30 +3704,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rover-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "flate2",
- "iced",
- "prost",
- "rfd",
- "rover-core",
- "rover-proto",
- "serde",
- "serde_json",
- "tar",
- "tokio",
- "tokio-stream",
- "toml",
- "tonic",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "rover-client-v2"
 version = "0.1.0"
 dependencies = [

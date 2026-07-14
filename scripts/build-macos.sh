@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ──────────────────────────────────────────────
-# build-macos.sh — Compile the Rover client for macOS
+# build-macos.sh — Compile the Rover v2 client for macOS
 # ──────────────────────────────────────────────
 
 APP_NAME="Rover"
@@ -10,16 +10,16 @@ BINARY_NAME="rover"
 TARGET="aarch64-apple-darwin"
 PROFILE="${1:-release}"
 OUT_DIR="dist/macos"
-ICON_SRC="crates/rover-client/icon/icon.png"
+ICON_SRC="crates/rover-client-v2/icon/icon.png"
 
 echo "=== Building $APP_NAME for macOS ($TARGET, $PROFILE) ==="
 
 # Build the binary
 if [ "$PROFILE" = "release" ]; then
-    cargo build --release -p rover-client --target "$TARGET"
+    cargo build --release -p rover-client-v2 --target "$TARGET"
     BIN_PATH="target/$TARGET/release/$BINARY_NAME"
 else
-    cargo build -p rover-client --target "$TARGET"
+    cargo build -p rover-client-v2 --target "$TARGET"
     BIN_PATH="target/$TARGET/debug/$BINARY_NAME"
 fi
 
@@ -63,7 +63,7 @@ cat > "$OUT_DIR/$APP_NAME.app/Contents/Info.plist" << EOF
     <key>CFBundleDisplayName</key>
     <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>
-    <string>dev.rover.client</string>
+    <string>dev.rover.client-v2</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
