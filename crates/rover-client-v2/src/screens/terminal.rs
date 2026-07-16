@@ -1,11 +1,10 @@
 /// System shell terminal — provides a live shell session to the connected server.
 ///
-/// Rendered as a dark machine surface with monospace output and a text input
-/// for commands. Uses the `SystemShell` bidirectional gRPC stream.
+/// Output is rendered as clickable monospace lines — click any line to copy it.
 use iced::widget::{Space, button, column, container, row, scrollable, text, text_input};
 use iced::{Alignment, Element, Length};
 
-use lucide_icons::iced::{icon_copy, icon_terminal, icon_x};
+use lucide_icons::iced::{icon_copy, icon_loader, icon_terminal, icon_x};
 
 use crate::app::RoverApp;
 use crate::message::Message;
@@ -26,7 +25,7 @@ pub fn terminal(app: &RoverApp) -> Element<'_, Message> {
             row![
                 icon_copy().size(12),
                 Space::with_width(4),
-                text("Copy")
+                text("Copy All")
                     .size(theme::TEXT_SM)
                     .color(theme::INK_SECONDARY),
             ]
@@ -48,17 +47,22 @@ pub fn terminal(app: &RoverApp) -> Element<'_, Message> {
     ]
     .align_y(Alignment::Center);
 
-    // Terminal output area
+    // Terminal output area — each line clickable to copy
     let output_lines: Vec<Element<Message>> = app
         .terminal_output
         .iter()
         .map(|line| {
-            text(line)
-                .size(TEXT_MONO)
-                .font(iced::Font::MONOSPACE)
-                .color(theme::MACHINE_TEXT)
-                .shaping(text::Shaping::Advanced)
-                .into()
+            let line_owned = line.clone();
+            button(
+                text(line)
+                    .size(TEXT_MONO)
+                    .font(iced::Font::MONOSPACE)
+                    .color(theme::MACHINE_TEXT)
+                    .shaping(text::Shaping::Advanced),
+            )
+            .style(button::text)
+            .on_press(Message::Copy(line_owned))
+            .into()
         })
         .collect();
 
@@ -100,12 +104,36 @@ pub fn terminal(app: &RoverApp) -> Element<'_, Message> {
         .font(iced::Font::MONOSPACE)
         .width(Length::Fill);
 
+    // Pending status
+    let status_line: Element<Message> = if app.terminal_pending {
+        row![
+            icon_loader().size(12).color(theme::WARNING),
+            Space::with_width(6),
+            text(format!("Running: {}", app.terminal_last_cmd))
+                .size(TEXT_STATUS)
+                .font(iced::Font::MONOSPACE)
+                .color(theme::WARNING),
+        ]
+        .align_y(Alignment::Center)
+        .into()
+    } else {
+        container(
+            text("Ready")
+                .size(TEXT_STATUS)
+                .color(theme::with_alpha(theme::INK_SECONDARY, 0.4)),
+        )
+        .height(Length::Fixed(18.0))
+        .into()
+    };
+
     let body = column![
         header,
         Space::with_height(theme::SPACE_MD),
         output_container,
         Space::with_height(theme::SPACE_SM),
         input_row,
+        Space::with_height(4),
+        status_line,
     ]
     .spacing(0)
     .padding(theme::SPACE_XL)
@@ -116,3 +144,4 @@ pub fn terminal(app: &RoverApp) -> Element<'_, Message> {
 }
 
 const TEXT_MONO: u16 = 12;
+const TEXT_STATUS: u16 = 10;

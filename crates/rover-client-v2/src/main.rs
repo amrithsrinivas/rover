@@ -123,6 +123,7 @@ fn init() -> (RoverApp, Task<Message>) {
         confirm_server_delete: None,
         editing_server: None,
         rename_value: String::new(),
+        edit_address: String::new(),
         update_open: false,
         update_build: String::new(),
         update_run: String::new(),
@@ -133,11 +134,13 @@ fn init() -> (RoverApp, Task<Message>) {
         terminal_input: String::new(),
         terminal_sender: None,
         terminal_buffer: Arc::new(std::sync::Mutex::new(Vec::new())),
+        terminal_pending: false,
+        terminal_last_cmd: String::new(),
     };
 
     (app, Task::batch(connect_tasks))
 }
 
 fn subscription(_app: &RoverApp) -> Subscription<Message> {
-    iced::time::every(Duration::from_secs(2)).map(|_| Message::Tick)
+    iced::time::every(Duration::from_millis(500)).map(|_| Message::Tick)
 }

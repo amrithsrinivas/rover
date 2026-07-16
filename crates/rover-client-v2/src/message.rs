@@ -29,6 +29,8 @@ pub enum Message {
     DeleteServer(usize),
     StartRename(usize),
     SetRenameValue(String),
+    /// Edit connection address.
+    SetEditAddress(String),
     ConfirmRename(usize),
     CancelRename,
 

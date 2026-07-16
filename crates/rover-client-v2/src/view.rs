@@ -716,6 +716,24 @@ fn manage_servers_modal(app: &RoverApp) -> Element<'_, Message> {
                     .into()
             };
 
+            // Address cell — editable when in edit mode
+            let addr_cell: Element<Message> = if app.editing_server == Some(idx) {
+                text_input("address", &app.edit_address)
+                    .on_input(Message::SetEditAddress)
+                    .on_submit(Message::ConfirmRename(idx))
+                    .size(theme::TEXT_SM)
+                    .padding(4)
+                    .font(iced::Font::MONOSPACE)
+                    .width(Length::Fixed(200.0))
+                    .into()
+            } else {
+                text(&server.profile.address)
+                    .size(theme::TEXT_SM)
+                    .font(iced::Font::MONOSPACE)
+                    .color(theme::INK_SECONDARY)
+                    .into()
+            };
+
             let info_text: Element<Message> = if let Some(info) = &server.info {
                 text(format!(
                     "v{}  —  {}  —  uptime {}",
@@ -748,27 +766,39 @@ fn manage_servers_modal(app: &RoverApp) -> Element<'_, Message> {
                         Space::with_width(12),
                         name_cell,
                         Space::with_width(16),
-                        column![
-                            text(&server.profile.address)
-                                .size(theme::TEXT_SM)
-                                .font(iced::Font::MONOSPACE)
-                                .color(theme::INK_SECONDARY),
-                            info_text,
-                        ]
-                        .spacing(2),
+                        column![addr_cell, info_text,].spacing(2),
                         Space::with_width(Length::Fill),
-                        row![
-                            button(icon_pencil().size(14).color(theme::INK_SECONDARY))
-                                .style(button::text)
-                                .on_press(Message::StartRename(idx)),
-                            Space::with_width(4),
-                            disconnect_btn,
-                            Space::with_width(4),
-                            button(icon_trash_2().size(14).color(theme::RED))
-                                .style(button::text)
-                                .on_press(Message::ConfirmServerDelete(idx)),
-                        ]
-                        .align_y(Alignment::Center),
+                        if app.editing_server == Some(idx) {
+                            let cancel_btn: Element<Message> =
+                                button(text("Cancel").size(theme::TEXT_SM))
+                                    .style(button::text)
+                                    .on_press(Message::CancelRename)
+                                    .into();
+                            let save_btn: Element<Message> =
+                                button(text("Save").size(theme::TEXT_SM))
+                                    .style(button::primary)
+                                    .on_press(Message::ConfirmRename(idx))
+                                    .into();
+                            let edit_row: Element<Message> =
+                                row![cancel_btn, Space::with_width(4), save_btn,]
+                                    .align_y(Alignment::Center)
+                                    .into();
+                            edit_row
+                        } else {
+                            row![
+                                button(icon_pencil().size(14).color(theme::INK_SECONDARY))
+                                    .style(button::text)
+                                    .on_press(Message::StartRename(idx)),
+                                Space::with_width(4),
+                                disconnect_btn,
+                                Space::with_width(4),
+                                button(icon_trash_2().size(14).color(theme::RED))
+                                    .style(button::text)
+                                    .on_press(Message::ConfirmServerDelete(idx)),
+                            ]
+                            .align_y(Alignment::Center)
+                            .into()
+                        },
                     ]
                     .align_y(Alignment::Center),
                 ]

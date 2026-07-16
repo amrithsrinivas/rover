@@ -115,6 +115,7 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
         Message::StartRename(idx) => {
             if let Some(server) = app.servers.get(idx) {
                 app.rename_value = server.profile.name.clone();
+                app.edit_address = server.profile.address.clone();
                 app.editing_server = Some(idx);
             }
             Task::none()
@@ -123,22 +124,30 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             app.rename_value = value;
             Task::none()
         }
+        Message::SetEditAddress(value) => {
+            app.edit_address = value;
+            Task::none()
+        }
         Message::ConfirmRename(idx) => {
             let new_name = app.rename_value.trim().to_string();
-            if !new_name.is_empty() && idx < app.servers.len() {
+            let new_addr = app.edit_address.trim().to_string();
+            if !new_name.is_empty() && !new_addr.is_empty() && idx < app.servers.len() {
                 app.servers[idx].profile.name = new_name.clone();
+                app.servers[idx].profile.address = new_addr;
                 let mut store = ConnectionProfileStore::load_from_disk().unwrap_or_default();
                 store.upsert(app.servers[idx].profile.clone());
                 let _ = store.save_to_disk();
             }
             app.editing_server = None;
             app.rename_value.clear();
+            app.edit_address.clear();
             app.rebuild_all_apps();
             Task::none()
         }
         Message::CancelRename => {
             app.editing_server = None;
             app.rename_value.clear();
+            app.edit_address.clear();
             Task::none()
         }
         Message::ConfirmServerDelete(idx) => {
@@ -546,7 +555,17 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
         }
         Message::SubmitShellCommand => {
             let cmd = app.terminal_input.clone();
+            if cmd.trim().is_empty() {
+                return Task::none();
+            }
             app.terminal_input.clear();
+            // Echo the command in the output buffer for immediate feedback
+            {
+                let mut buf = app.terminal_buffer.lock().unwrap();
+                buf.push(format!("$ {cmd}"));
+            }
+            app.terminal_pending = true;
+            app.terminal_last_cmd = cmd.clone();
             if let Some(ref tx) = app.terminal_sender {
                 let mut data = cmd.into_bytes();
                 data.push(b'\n');
@@ -559,6 +578,8 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             app.terminal_sender = None;
             app.terminal_output.clear();
             app.terminal_input.clear();
+            app.terminal_pending = false;
+            app.terminal_last_cmd.clear();
             app.terminal_buffer = Arc::new(StdMutex::new(Vec::new()));
             app.screen = Screen::Dashboard;
             Task::none()
@@ -721,8 +742,12 @@ fn tick(app: &mut RoverApp) -> Task<Message> {
     }
 
     // Copy terminal buffer to output
+    // Copy terminal buffer to output and detect new output
     if app.terminal_open {
         let mut buf = app.terminal_buffer.lock().unwrap();
+        if buf.len() > app.terminal_output.len() {
+            app.terminal_pending = false;
+        }
         app.terminal_output.clone_from(&buf);
     }
 

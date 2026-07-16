@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -30,6 +31,7 @@ pub struct RoverServer {
     pub deployer: Arc<Deployer>,
     pub process_manager: ProcessManager,
     pub start_time: std::time::Instant,
+    pub data_dir: PathBuf,
 }
 
 // ----------------------------------------------------------------------
@@ -42,7 +44,7 @@ pub async fn start(
     auth: AuthManager,
     deployer: Deployer,
     process_manager: ProcessManager,
-    _data_dir: &std::path::Path,
+    data_dir: &std::path::Path,
 ) -> anyhow::Result<()> {
     let auth = Arc::new(auth);
 
@@ -52,6 +54,7 @@ pub async fn start(
         deployer: Arc::new(deployer),
         process_manager,
         start_time: std::time::Instant::now(),
+        data_dir: data_dir.to_path_buf(),
     };
 
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
@@ -229,6 +232,7 @@ impl ServerService for RoverServer {
         let (tx, rx) = mpsc::channel(64);
 
         let mut child = tokio::process::Command::new("sh")
+            .current_dir(&self.data_dir)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())

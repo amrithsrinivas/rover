@@ -188,6 +188,7 @@ pub struct RoverApp {
     pub confirm_server_delete: Option<usize>,
     pub editing_server: Option<usize>,
     pub rename_value: String,
+    pub edit_address: String,
     pub update_open: bool,
     pub update_build: String,
     pub update_run: String,
@@ -202,6 +203,8 @@ pub struct RoverApp {
     pub terminal_input: String,
     pub terminal_sender: Option<Sender<rover_proto::v1::ShellInput>>,
     pub terminal_buffer: Arc<StdMutex<Vec<String>>>,
+    pub terminal_pending: bool,
+    pub terminal_last_cmd: String,
 }
 
 impl RoverApp {
