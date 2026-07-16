@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
 
 use iced::Task;
@@ -483,6 +484,85 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::Copy(text) => iced::clipboard::write(text),
+
+        // ── Terminal ──────────────────────────────────────────────────
+        Message::OpenTerminal(si) => {
+            app.terminal_open = true;
+            app.terminal_server = si;
+            app.terminal_output.clear();
+            app.terminal_input.clear();
+            app.screen = Screen::Terminal(si);
+
+            let client = app.client_for(si);
+            let name = app.server_name_for(si);
+            let (input_tx, input_rx) =
+                tokio::sync::mpsc::channel::<rover_proto::v1::ShellInput>(64);
+            let buffer = Arc::new(StdMutex::new(Vec::<String>::new()));
+
+            app.terminal_sender = Some(input_tx);
+            app.terminal_buffer = buffer.clone();
+
+            // Spawn a persistent background task that reads shell output
+            // into the shared buffer. The UI reads from buffer on each tick.
+            tokio::spawn(async move {
+                let c = match client {
+                    Some(c) => c,
+                    None => return,
+                };
+                let mut c = c.lock().await;
+                let mut stream = match c.system_shell(input_rx).await {
+                    Ok(s) => s,
+                    Err(_) => return,
+                };
+                drop(c);
+                use tokio_stream::StreamExt;
+                while let Some(result) = stream.next().await {
+                    match result {
+                        Ok(output) => {
+                            if let Ok(text) = String::from_utf8(output.data) {
+                                let mut buf = buffer.lock().unwrap();
+                                for line in text.lines() {
+                                    buf.push(line.to_string());
+                                }
+                                if buf.len() > 500 {
+                                    let trim = buf.len() - 500;
+                                    buf.drain(0..trim);
+                                }
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+
+            Task::done(Message::Info(format!("Shell opened on {name}")))
+        }
+        Message::ShellStarted(_) => Task::none(),
+        Message::ShellOutput(data) => Task::none(), // Handled via buffer in tick
+        Message::ShellClosed => Task::none(),       // Stream ended, handled in bg task
+        Message::SetTerminalInput(input) => {
+            app.terminal_input = input;
+            Task::none()
+        }
+        Message::SubmitShellCommand => {
+            let cmd = app.terminal_input.clone();
+            app.terminal_input.clear();
+            if let Some(ref tx) = app.terminal_sender {
+                let mut data = cmd.into_bytes();
+                data.push(b'\n');
+                let _ = tx.try_send(rover_proto::v1::ShellInput { data });
+            }
+            Task::none()
+        }
+        Message::CloseTerminal => {
+            app.terminal_open = false;
+            app.terminal_sender = None;
+            app.terminal_output.clear();
+            app.terminal_input.clear();
+            app.terminal_buffer = Arc::new(StdMutex::new(Vec::new()));
+            app.screen = Screen::Dashboard;
+            Task::none()
+        }
     }
 }
 
@@ -638,6 +718,12 @@ fn tick(app: &mut RoverApp) -> Task<Message> {
     if let Screen::AppDetail(ref app_id, si) = app.screen.clone() {
         tasks.push(fetch_detail(app, app_id, si));
         tasks.push(fetch_logs(app, app_id, si));
+    }
+
+    // Copy terminal buffer to output
+    if app.terminal_open {
+        let mut buf = app.terminal_buffer.lock().unwrap();
+        app.terminal_output.clone_from(&buf);
     }
 
     if tasks.is_empty() {

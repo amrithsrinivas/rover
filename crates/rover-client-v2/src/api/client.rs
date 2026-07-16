@@ -128,6 +128,23 @@ impl RoverClient {
         Ok(resp.apps)
     }
 
+    /// Open a bidirectional system shell session.
+    /// Takes a receiver for stdin bytes and returns a stream for stdout/stderr.
+    pub async fn system_shell(
+        &mut self,
+        rx: tokio::sync::mpsc::Receiver<v1::ShellInput>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<v1::ShellOutput, Status>> + Send>>, String> {
+        let input_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        let request = Request::new(input_stream);
+        let resp = self
+            .server
+            .system_shell(request)
+            .await
+            .map_err(|e| format!("system_shell failed: {e}"))?
+            .into_inner();
+        Ok(Box::pin(resp))
+    }
+
     // ── AppService ───────────────────────────────────────────────────────
 
     pub async fn get_app(&mut self, app_id: &str) -> Result<v1::AppDetailResponse, String> {

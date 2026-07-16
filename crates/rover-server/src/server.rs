@@ -217,6 +217,93 @@ impl ServerService for RoverServer {
             }),
         }))
     }
+
+    type SystemShellStream =
+        Pin<Box<dyn tokio_stream::Stream<Item = Result<v1::ShellOutput, Status>> + Send>>;
+
+    async fn system_shell(
+        &self,
+        request: Request<Streaming<v1::ShellInput>>,
+    ) -> Result<Response<Self::SystemShellStream>, Status> {
+        let mut in_stream = request.into_inner();
+        let (tx, rx) = mpsc::channel(64);
+
+        let mut child = tokio::process::Command::new("sh")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| Status::internal(format!("failed to spawn shell: {e}")))?;
+
+        let mut stdin = child.stdin.take().unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let mut stderr = child.stderr.take().unwrap();
+
+        tokio::spawn(async move {
+            use tokio::io::AsyncWriteExt;
+            while let Some(Ok(input)) = in_stream.next().await {
+                if input.data.is_empty() {
+                    continue;
+                }
+                if stdin.write_all(&input.data).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        let tx_out = tx.clone();
+        tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            let mut buf = [0u8; 4096];
+            loop {
+                match stdout.read(&mut buf).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if tx_out
+                            .send(Ok(v1::ShellOutput {
+                                data: buf[..n].to_vec(),
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        let tx_err = tx.clone();
+        tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            let mut buf = [0u8; 4096];
+            loop {
+                match stderr.read(&mut buf).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if tx_err
+                            .send(Ok(v1::ShellOutput {
+                                data: buf[..n].to_vec(),
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        tokio::spawn(async move {
+            let _ = child.wait().await;
+        });
+
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        Ok(Response::new(Box::pin(stream)))
+    }
 }
 
 // ----------------------------------------------------------------------

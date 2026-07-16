@@ -10,81 +10,47 @@ pub enum Message {
     Tick,
 
     // ── Server management ───────────────────────────────────────────────
-    /// Show the "Manage Servers" modal.
     ManageServers,
-    /// Close the manage servers modal.
     CloseManageServers,
-    /// Show the "Add server" connection form.
     ShowAddForm,
-    /// Hide the connection form.
     HideAddForm,
-    /// Connection form field: address.
     SetAddr(String),
-    /// Connection form field: pairing token.
     SetToken(String),
-    /// Connection form field: server name.
     SetServerName(String),
-    /// Submit the connection form (pair with a new server).
     Connect,
-    /// New server paired successfully.
     ServerAdded(String, ClientRef, String),
-    /// Connection form error.
     ServerAddError(String),
-    /// Existing server reconnected successfully.
     ServerConnected(usize, Option<ClientRef>),
-    /// Existing server connection error.
     ServerError(usize, String),
-    /// Disconnect a specific server by index.
     Disconnect(usize),
-    /// Reconnect a disconnected server by index.
     Reconnect(usize),
-    /// Show delete confirmation for a server profile.
     ConfirmServerDelete(usize),
-    /// Dismiss server delete confirmation.
     CancelServerDelete,
-    /// Execute server deletion.
     DeleteServer(usize),
-    /// Start renaming a server.
     StartRename(usize),
-    /// Rename text input.
     SetRenameValue(String),
-    /// Confirm rename.
     ConfirmRename(usize),
-    /// Cancel rename.
     CancelRename,
 
     // ── Data refresh ───────────────────────────────────────────────────
-    /// Refresh result for one server: (server_index, info, metrics).
     ServerData(usize, Box<ServerInfo>, Box<ServerMetrics>),
-    /// App list result for one server: (server_index, apps).
     ServerApps(usize, Vec<AppSummary>),
 
     // ── App detail ─────────────────────────────────────────────────────
-    /// Navigate to app detail: (app_id, server_index).
     SelectApp(String, usize),
-    /// GetApp RPC result.
     AppDetail(Box<AppDetailResponse>),
-    /// StreamLogs result.
     LogLines(Vec<String>),
-    /// Return to dashboard.
     BackToDashboard,
-    /// Start an app: (app_id, server_index).
     StartApp(String, usize),
-    /// Stop an app: (app_id, server_index).
     StopApp(String, usize),
-    /// Restart an app: (app_id, server_index).
     RestartApp(String, usize),
-    /// Show delete confirmation: (app_id, server_index).
     DeleteApp(String, usize),
-    /// Dismiss delete confirmation.
     CancelDelete,
-    /// Execute delete: (app_id, name, server_index).
     ConfirmDelete(String, String, usize),
 
     // ── Deploy ─────────────────────────────────────────────────────────
     OpenDeploy,
     CloseDeploy,
-    /// Which server to deploy to.
     SetDeployTarget(Option<usize>),
     SetDeployName(String),
     SetDeployRuntime(String),
@@ -126,4 +92,20 @@ pub enum Message {
 
     // ── Clipboard ──────────────────────────────────────────────────────
     Copy(String),
+
+    // ── Terminal ──────────────────────────────────────────────────────
+    /// Open the system shell for a server.
+    OpenTerminal(usize),
+    /// Shell session established — store the input sender.
+    ShellStarted(tokio::sync::mpsc::Sender<rover_proto::v1::ShellInput>),
+    /// Shell output received from the server.
+    ShellOutput(Vec<u8>),
+    /// Shell stream ended.
+    ShellClosed,
+    /// Terminal text input field changed.
+    SetTerminalInput(String),
+    /// Send the current input as a shell command.
+    SubmitShellCommand,
+    /// Close the terminal session.
+    CloseTerminal,
 }

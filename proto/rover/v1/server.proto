@@ -2,6 +2,7 @@ syntax = "proto3";
 package rover.v1;
 
 import "rover/v1/common.proto";
+import "rover/v1/app.proto";
 
 // --- Server info ---
 
@@ -44,4 +45,5 @@ service ServerService {
   rpc GetMetrics(GetMetricsRequest) returns (ServerMetrics);
   rpc StreamMetrics(GetMetricsRequest) returns (stream ServerMetrics);
   rpc ListApps(AppListRequest) returns (AppListResponse);
+  rpc SystemShell(stream ShellInput) returns (stream ShellOutput);
 }

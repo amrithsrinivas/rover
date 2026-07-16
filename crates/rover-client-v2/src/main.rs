@@ -127,6 +127,12 @@ fn init() -> (RoverApp, Task<Message>) {
         update_build: String::new(),
         update_run: String::new(),
         toasts: Vec::new(),
+        terminal_open: false,
+        terminal_server: 0,
+        terminal_output: Vec::new(),
+        terminal_input: String::new(),
+        terminal_sender: None,
+        terminal_buffer: Arc::new(std::sync::Mutex::new(Vec::new())),
     };
 
     (app, Task::batch(connect_tasks))

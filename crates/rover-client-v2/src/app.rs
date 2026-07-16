@@ -1,8 +1,10 @@
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
 
 use rover_core::ConnectionProfile;
 use rover_proto::v1::{AppDetailResponse, AppSummary, ServerInfo, ServerMetrics};
+use tokio::sync::mpsc::Sender;
 
 use crate::api::client::RoverClient;
 
@@ -129,6 +131,8 @@ pub enum Screen {
     Dashboard,
     /// (app_id, server_index)
     AppDetail(String, usize),
+    /// System shell (server_index)
+    Terminal(usize),
 }
 
 // ── Root application state ───────────────────────────────────────────────────
@@ -190,6 +194,14 @@ pub struct RoverApp {
 
     // ── Notifications ─────────────────────────────────────────────────────
     pub toasts: Vec<Toast>,
+
+    // ── Terminal ─────────────────────────────────────────────────────────
+    pub terminal_open: bool,
+    pub terminal_server: usize,
+    pub terminal_output: Vec<String>,
+    pub terminal_input: String,
+    pub terminal_sender: Option<Sender<rover_proto::v1::ShellInput>>,
+    pub terminal_buffer: Arc<StdMutex<Vec<String>>>,
 }
 
 impl RoverApp {

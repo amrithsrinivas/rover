@@ -1,7 +1,9 @@
 use iced::widget::{Space, button, column, container, row, scrollable, stack, text, text_input};
 use iced::{Alignment, Element, Length};
 
-use lucide_icons::iced::{icon_pencil, icon_plug, icon_plus, icon_rocket, icon_trash_2};
+use lucide_icons::iced::{
+    icon_pencil, icon_plug, icon_plus, icon_rocket, icon_terminal, icon_trash_2,
+};
 
 use crate::app::{RoverApp, Screen, ServerState};
 use crate::message::Message;
@@ -17,6 +19,7 @@ pub fn view(app: &RoverApp) -> Element<'_, Message> {
     } else {
         match &app.screen {
             Screen::AppDetail(_, _) => app_detail_layout(app),
+            Screen::Terminal(_) => crate::screens::terminal::terminal(app),
             Screen::Dashboard | Screen::Connect => dashboard_layout(app),
         }
     };
@@ -193,10 +196,41 @@ fn server_card<'a>(
 
     let info = server.info.as_ref();
 
-    // Build the inner content with fixed-height rows for layout stability
-    let card_body = container(
+    // Action buttons based on connection state
+    let actions: Element<Message> = if server.connected {
+        let shell_btn: Element<Message> = button(
+            row![
+                icon_terminal().size(13),
+                Space::with_width(4),
+                text("Shell").size(theme::TEXT_SM),
+            ]
+            .align_y(Alignment::Center),
+        )
+        .style(button::secondary)
+        .on_press(Message::OpenTerminal(idx))
+        .into();
+
+        row![
+            shell_btn,
+            Space::with_width(theme::SPACE_SM),
+            button(text("Disconnect").size(theme::TEXT_SM))
+                .style(button::text)
+                .on_press(Message::Disconnect(idx))
+                .into(),
+        ]
+        .align_y(Alignment::Center)
+        .into()
+    } else if server.profile.api_key.is_some() && !server.connecting {
+        button(text("Connect").size(theme::TEXT_SM))
+            .style(button::secondary)
+            .on_press(Message::Reconnect(idx))
+            .into()
+    } else {
+        Space::with_height(0).into()
+    };
+
+    container(
         column![
-            // Row 1: name + status badge (always present)
             row![
                 text(&server.profile.name)
                     .size(theme::TEXT_BASE)
@@ -205,7 +239,6 @@ fn server_card<'a>(
                 status_chip(server.status_label(), status_color),
             ]
             .align_y(Alignment::Center),
-            // Row 2: server details (hostname/os or address) — fixed height
             container(
                 text(if let Some(info) = info {
                     format!("{}  v{}", info.hostname, info.version)
@@ -218,7 +251,6 @@ fn server_card<'a>(
                 .color(theme::INK_SECONDARY),
             )
             .height(Length::Fixed(18.0)),
-            // Row 3: metrics (always show placeholders if missing)
             row![
                 metric_line("CPU", cpu_str),
                 Space::with_width(12),
@@ -229,25 +261,13 @@ fn server_card<'a>(
                 metric_line("Apps", server.app_count().to_string()),
             ]
             .align_y(Alignment::Center),
-            // Row 4: action hint (subtle click indicator)
-            container(
-                text(if server.connected {
-                    "click to disconnect"
-                } else if server.profile.api_key.is_some() {
-                    "click to reconnect"
-                } else {
-                    ""
-                })
-                .size(9)
-                .color(theme::with_alpha(theme::INK_SECONDARY, 0.5)),
-            )
-            .height(Length::Fixed(14.0)),
+            actions,
         ]
         .spacing(4)
         .padding(theme::SPACE_MD),
     )
     .width(Length::Fill)
-    .height(Length::Fixed(116.0))
+    .height(Length::Fixed(132.0))
     .style(|_theme| container::Style {
         border: iced::Border {
             color: theme::BORDER,
@@ -255,26 +275,8 @@ fn server_card<'a>(
             radius: theme::RADIUS_MD.into(),
         },
         ..container::Style::default()
-    });
-
-    // Toggle: connected → disconnect, disconnected with key → reconnect
-    let action = if server.connected {
-        Some(Message::Disconnect(idx))
-    } else if server.profile.api_key.is_some() && !server.connecting {
-        Some(Message::Reconnect(idx))
-    } else {
-        None
-    };
-
-    if let Some(msg) = action {
-        button(card_body)
-            .width(Length::Fill)
-            .style(button::text)
-            .on_press(msg)
-            .into()
-    } else {
-        card_body.into()
-    }
+    })
+    .into()
 }
 
 fn status_chip<'a>(label: &'a str, color: iced::Color) -> Element<'a, Message> {
