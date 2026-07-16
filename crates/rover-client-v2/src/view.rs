@@ -210,21 +210,24 @@ fn server_card<'a>(
         .on_press(Message::OpenTerminal(idx))
         .into();
 
+        let disconnect_btn: Element<Message> = button(text("Disconnect").size(theme::TEXT_SM))
+            .style(button::text)
+            .on_press(Message::Disconnect(idx))
+            .into();
+
         row![
             shell_btn,
             Space::with_width(theme::SPACE_SM),
-            button(text("Disconnect").size(theme::TEXT_SM))
-                .style(button::text)
-                .on_press(Message::Disconnect(idx))
-                .into(),
+            disconnect_btn,
         ]
         .align_y(Alignment::Center)
         .into()
     } else if server.profile.api_key.is_some() && !server.connecting {
-        button(text("Connect").size(theme::TEXT_SM))
+        let connect_btn: Element<Message> = button(text("Connect").size(theme::TEXT_SM))
             .style(button::secondary)
             .on_press(Message::Reconnect(idx))
-            .into()
+            .into();
+        connect_btn
     } else {
         Space::with_height(0).into()
     };
