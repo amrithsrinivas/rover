@@ -6,22 +6,13 @@ use tokio::task::JoinHandle;
 
 /// An active bore tunnel forwarding traffic to our local gRPC server.
 pub struct BoreTunnel {
-    /// The bore server hostname (e.g. "bore.pub").
-    pub host: String,
-    /// The port assigned by the bore server (randomly allocated).
-    pub port: u16,
     /// Full public address string (e.g. "bore.pub:51923").
     pub address: String,
-    /// Background task running the tunnel listener.
-    task: JoinHandle<()>,
+    /// Background task running the tunnel listener — aborted on drop.
+    _task: JoinHandle<()>,
 }
 
 impl BoreTunnel {
-    /// Shut down the tunnel.
-    pub fn close(self) {
-        self.task.abort();
-    }
-
     pub fn public_address(&self) -> String {
         self.address.clone()
     }
@@ -84,10 +75,8 @@ pub async fn start_tunnel(config: BoreConfig) -> anyhow::Result<BoreTunnel> {
     });
 
     let tunnel = BoreTunnel {
-        host: config.server_host,
-        port: remote_port,
         address,
-        task,
+        _task: task,
     };
 
     tracing::info!(

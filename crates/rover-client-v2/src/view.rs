@@ -186,6 +186,10 @@ fn server_card<'a>(
         .metrics
         .as_ref()
         .map_or("--".into(), |m| theme::format_bytes(m.ram_used_bytes));
+    let disk_str = server
+        .metrics
+        .as_ref()
+        .map_or("--".into(), |m| theme::format_bytes(m.disk_used_bytes));
 
     let info = server.info.as_ref();
 
@@ -220,6 +224,8 @@ fn server_card<'a>(
                 Space::with_width(12),
                 metric_line("RAM", ram_str),
                 Space::with_width(12),
+                metric_line("Disk", disk_str),
+                Space::with_width(12),
                 metric_line("Apps", server.app_count().to_string()),
             ]
             .align_y(Alignment::Center),
@@ -241,7 +247,7 @@ fn server_card<'a>(
         .padding(theme::SPACE_MD),
     )
     .width(Length::Fill)
-    .height(Length::Fixed(110.0))
+    .height(Length::Fixed(116.0))
     .style(|_theme| container::Style {
         border: iced::Border {
             color: theme::BORDER,

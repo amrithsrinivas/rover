@@ -3,7 +3,7 @@ use iced::widget::{Space, button, column, container, row, scrollable, stack, tex
 use iced::{Alignment, Element, Length};
 
 use lucide_icons::iced::{
-    icon_arrow_left, icon_copy, icon_play, icon_rotate_cw, icon_settings, icon_square, icon_trash_2,
+    icon_arrow_left, icon_copy, icon_play, icon_settings, icon_square, icon_trash_2,
 };
 
 use crate::app::RoverApp;
@@ -235,29 +235,43 @@ fn actions_row<'a>(
     let app_id = detail.app_id.clone();
     let si = app.app_detail_server;
 
-    row![
-        action_button(
+    // Build action buttons conditionally based on status
+    let mut buttons: Vec<Element<Message>> = Vec::new();
+
+    // Start: show when stopped, crashed, or failed
+    if matches!(detail.status, 4 | 5 | 6) {
+        buttons.push(action_button(
             "Start",
             || icon_play().size(13),
             Message::StartApp(app_id.clone(), si),
-        ),
-        Space::with_width(theme::SPACE_SM),
-        action_button(
+        ));
+    }
+
+    // Stop: show when running
+    if detail.status == 3 {
+        buttons.push(action_button(
             "Stop",
             || icon_square().size(13),
             Message::StopApp(app_id.clone(), si),
-        ),
-        Space::with_width(theme::SPACE_SM),
-        action_button(
-            "Restart",
-            || icon_rotate_cw().size(13),
-            Message::RestartApp(app_id.clone(), si),
-        ),
-        Space::with_width(theme::SPACE_SM),
-        action_button_danger("Delete", Message::DeleteApp(app_id.clone(), si)),
-    ]
-    .spacing(0)
-    .into()
+        ));
+    }
+
+    // Delete: always available
+    buttons.push(action_button_danger(
+        "Delete",
+        Message::DeleteApp(app_id.clone(), si),
+    ));
+
+    // Intersperse with spacing
+    let mut spaced = Vec::new();
+    for (i, btn) in buttons.into_iter().enumerate() {
+        if i > 0 {
+            spaced.push(Space::with_width(theme::SPACE_SM).into());
+        }
+        spaced.push(btn);
+    }
+
+    row(spaced).spacing(0).into()
 }
 
 fn action_button<F>(label: &'static str, icon: F, on_press: Message) -> Element<'static, Message>

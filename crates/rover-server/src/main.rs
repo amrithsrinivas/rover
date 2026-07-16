@@ -117,14 +117,23 @@ async fn main() -> anyhow::Result<()> {
         };
         match bore::start_tunnel(bore_config).await {
             Ok(tunnel) => {
+                let addr = tunnel.public_address();
                 tracing::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                tracing::info!("Public address: {}", tunnel.public_address());
+                tracing::info!("Public address: {addr}");
                 tracing::info!("Use this address to connect from the Rover client");
                 tracing::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                // Also print directly to stderr so it's always visible
+                eprintln!();
+                eprintln!("╔════════════════════════════════════════════╗");
+                eprintln!("║  Bore tunnel established                  ║");
+                eprintln!("║  Public address: {addr:<24} ║",);
+                eprintln!("╚════════════════════════════════════════════╝");
+                eprintln!();
             }
             Err(e) => {
                 tracing::warn!("Failed to establish bore tunnel: {e}");
                 tracing::warn!("Server will continue without public access");
+                eprintln!("Warning: Failed to establish bore tunnel: {e}");
             }
         }
     }
