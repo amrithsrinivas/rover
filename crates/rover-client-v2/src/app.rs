@@ -4,7 +4,7 @@ use tokio::sync::Mutex;
 
 use rover_core::ConnectionProfile;
 use rover_proto::v1::{AppDetailResponse, AppSummary, ServerInfo, ServerMetrics};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::api::client::RoverClient;
 
@@ -201,7 +201,7 @@ pub struct RoverApp {
     pub terminal_server: usize,
     pub terminal_output: Vec<String>,
     pub terminal_input: String,
-    pub terminal_sender: Option<Sender<rover_proto::v1::ShellInput>>,
+    pub terminal_sender: Option<UnboundedSender<rover_proto::v1::ShellInput>>,
     pub terminal_buffer: Arc<StdMutex<Vec<String>>>,
     pub terminal_pending: bool,
     pub terminal_last_cmd: String,

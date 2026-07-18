@@ -99,7 +99,7 @@ pub enum Message {
     /// Open the system shell for a server.
     OpenTerminal(usize),
     /// Shell session established — store the input sender.
-    ShellStarted(tokio::sync::mpsc::Sender<rover_proto::v1::ShellInput>),
+    ShellStarted(tokio::sync::mpsc::UnboundedSender<rover_proto::v1::ShellInput>),
     /// Shell output received from the server.
     ShellOutput(Vec<u8>),
     /// Shell stream ended.

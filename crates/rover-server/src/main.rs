@@ -108,34 +108,17 @@ async fn main() -> anyhow::Result<()> {
         health_checker.run().await;
     });
 
-    // Start bore tunnel if enabled
+    // Start bore tunnel if enabled (runs forever, reconnects on drop)
     if cli.bore {
         let bore_config = bore::BoreConfig {
             server_host: cli.bore_server,
             secret: cli.bore_secret,
             local_port: cli.port,
+            remote_port: None,
         };
-        match bore::start_tunnel(bore_config).await {
-            Ok(tunnel) => {
-                let addr = tunnel.public_address();
-                tracing::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                tracing::info!("Public address: {addr}");
-                tracing::info!("Use this address to connect from the Rover client");
-                tracing::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                // Also print directly to stderr so it's always visible
-                eprintln!();
-                eprintln!("╔════════════════════════════════════════════╗");
-                eprintln!("║  Bore tunnel established                  ║");
-                eprintln!("║  Public address: {addr:<24} ║",);
-                eprintln!("╚════════════════════════════════════════════╝");
-                eprintln!();
-            }
-            Err(e) => {
-                tracing::warn!("Failed to establish bore tunnel: {e}");
-                tracing::warn!("Server will continue without public access");
-                eprintln!("Warning: Failed to establish bore tunnel: {e}");
-            }
-        }
+        tokio::spawn(async move {
+            bore::run_tunnel_loop(bore_config).await;
+        });
     }
 
     // Start gRPC server

@@ -231,7 +231,14 @@ impl ServerService for RoverServer {
         let mut in_stream = request.into_inner();
         let (tx, rx) = mpsc::channel(64);
 
-        let mut child = tokio::process::Command::new("sh")
+        // Use bash with PS1 showing working directory, with PTY-like env for color support
+        let mut child = tokio::process::Command::new("bash")
+            .arg("--norc")
+            .arg("--noprofile")
+            .env("PS1", "\\[\\033[01;32m\\]\\w\\[\\033[00m\\]\\$ ")
+            .env("TERM", "xterm-256color")
+            .env("CLICOLOR", "1")
+            .env("LS_COLORS", "di=34:ln=36:ex=32")
             .current_dir(&self.data_dir)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())

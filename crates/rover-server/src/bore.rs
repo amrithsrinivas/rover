@@ -27,6 +27,8 @@ pub struct BoreConfig {
     pub secret: Option<String>,
     /// The local port to expose (our gRPC server).
     pub local_port: u16,
+    /// Previously assigned remote port — will be reused on reconnect.
+    pub remote_port: Option<u16>,
 }
 
 impl Default for BoreConfig {
@@ -35,34 +37,70 @@ impl Default for BoreConfig {
             server_host: "bore.pub".into(),
             secret: None,
             local_port: 9050,
+            remote_port: None,
         }
     }
 }
 
-/// Start a bore tunnel using the bore server's default port (port 0 signals
-/// the client to use the well-known bore port). Returns the tunnel with the
-/// randomly assigned remote port.
+/// Start a bore tunnel, optionally reusing a previously assigned remote port.
+/// If `config.remote_port` is set, the client requests that specific port.
+/// If the server rejects it, we fall back to a random port (0).
 pub async fn start_tunnel(config: BoreConfig) -> anyhow::Result<BoreTunnel> {
+    let preferred = config.remote_port.unwrap_or(0);
+
     tracing::info!(
         "Establishing bore tunnel to {} for local port {}",
         config.server_host,
         config.local_port,
     );
 
-    // port = 0 asks the Bore client to use the server's default port (7835).
-    let client = Client::new(
-        "localhost",
-        config.local_port,
-        &config.server_host,
-        0,
-        config.secret.as_deref(),
-    )
-    .await
-    .context(format!(
-        "Failed to connect to bore server '{}'. \
-         Make sure the server is running and reachable from this network.",
-        config.server_host,
-    ))?;
+    // Try with the preferred port first. 0 means random.
+    let client = if preferred != 0 {
+        tracing::info!("Requesting previously assigned remote port {preferred}...");
+        match Client::new(
+            "localhost",
+            config.local_port,
+            &config.server_host,
+            preferred,
+            config.secret.as_deref(),
+        )
+        .await
+        {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(
+                    "Could not reuse port {preferred}: {e}. Falling back to random port..."
+                );
+                Client::new(
+                    "localhost",
+                    config.local_port,
+                    &config.server_host,
+                    0,
+                    config.secret.as_deref(),
+                )
+                .await
+                .context(format!(
+                    "Failed to connect to bore server '{}'. \
+                     Make sure the server is running and reachable from this network.",
+                    config.server_host,
+                ))?
+            }
+        }
+    } else {
+        Client::new(
+            "localhost",
+            config.local_port,
+            &config.server_host,
+            0,
+            config.secret.as_deref(),
+        )
+        .await
+        .context(format!(
+            "Failed to connect to bore server '{}'. \
+             Make sure the server is running and reachable from this network.",
+            config.server_host,
+        ))?
+    };
 
     let remote_port = client.remote_port();
     let address = format!("{}:{remote_port}", config.server_host);
@@ -85,4 +123,46 @@ pub async fn start_tunnel(config: BoreConfig) -> anyhow::Result<BoreTunnel> {
     );
 
     Ok(tunnel)
+}
+
+/// Start a persistent bore tunnel that reconnects on failure.
+///
+/// When the tunnel drops (e.g. connection reset), it reconnects automatically.
+/// On reconnect, it first tries to reuse the previously assigned port. If that
+/// fails (port was taken by someone else), it falls back to a random port.
+///
+/// Spawn this as a background task — it runs forever.
+pub async fn run_tunnel_loop(mut config: BoreConfig) {
+    loop {
+        match start_tunnel(config.clone()).await {
+            Ok(tunnel) => {
+                let addr = tunnel.public_address();
+                tracing::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                tracing::info!("Public address: {addr}");
+                tracing::info!("Use this address to connect from the Rover client");
+                tracing::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                eprintln!();
+                eprintln!("╔════════════════════════════════════════════╗");
+                eprintln!("║  Bore tunnel established                  ║");
+                eprintln!("║  Public address: {addr:<24} ║");
+                eprintln!("╚════════════════════════════════════════════╝");
+                eprintln!();
+
+                // Save the assigned port so on reconnect we try to reuse it
+                let remote_port = addr.split(':').last().and_then(|p| p.parse().ok());
+                config.remote_port = remote_port;
+
+                // Wait for the tunnel to drop, then reconnect
+                let _ = tokio::join!(tunnel._task);
+
+                tracing::warn!("Bore tunnel lost — reconnecting in 5 seconds...");
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+            Err(e) => {
+                tracing::warn!("Failed to establish bore tunnel: {e}");
+                tracing::warn!("Retrying in 10 seconds...");
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            }
+        }
+    }
 }

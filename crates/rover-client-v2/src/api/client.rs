@@ -1,9 +1,11 @@
 use std::pin::Pin;
+use std::task::Poll;
 
 use rover_proto::v1::{
     self, app_service_client::AppServiceClient, auth_service_client::AuthServiceClient,
     server_service_client::ServerServiceClient,
 };
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_stream::Stream;
 use tonic::{
     Request, Status,
@@ -129,12 +131,11 @@ impl RoverClient {
     }
 
     /// Open a bidirectional system shell session.
-    /// Takes a receiver for stdin bytes and returns a stream for stdout/stderr.
     pub async fn system_shell(
         &mut self,
-        rx: tokio::sync::mpsc::Receiver<v1::ShellInput>,
+        rx: tokio::sync::mpsc::UnboundedReceiver<v1::ShellInput>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<v1::ShellOutput, Status>> + Send>>, String> {
-        let input_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        let input_stream = UnboundedReceiverStream::new(rx);
         let request = Request::new(input_stream);
         let resp = self
             .server
@@ -278,5 +279,27 @@ impl RoverClient {
             .map_err(|e| format!("update_app failed: {e}"))?
             .into_inner();
         Ok(resp)
+    }
+}
+
+/// Stream adapter for `tokio::sync::mpsc::UnboundedReceiver`.
+struct UnboundedReceiverStream<T> {
+    rx: tokio::sync::mpsc::UnboundedReceiver<T>,
+}
+
+impl<T> UnboundedReceiverStream<T> {
+    fn new(rx: tokio::sync::mpsc::UnboundedReceiver<T>) -> Self {
+        Self { rx }
+    }
+}
+
+impl<T> Stream for UnboundedReceiverStream<T> {
+    type Item = T;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<T>> {
+        self.rx.poll_recv(cx).map(|r| r)
     }
 }

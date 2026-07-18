@@ -505,9 +505,10 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             let client = app.client_for(si);
             let name = app.server_name_for(si);
             let (input_tx, input_rx) =
-                tokio::sync::mpsc::channel::<rover_proto::v1::ShellInput>(64);
+                tokio::sync::mpsc::unbounded_channel::<rover_proto::v1::ShellInput>();
             let buffer = Arc::new(StdMutex::new(Vec::<String>::new()));
 
+            // Clone sender before moving into spawn
             app.terminal_sender = Some(input_tx);
             app.terminal_buffer = buffer.clone();
 
@@ -516,14 +517,27 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             tokio::spawn(async move {
                 let c = match client {
                     Some(c) => c,
-                    None => return,
+                    None => {
+                        buffer
+                            .lock()
+                            .unwrap()
+                            .push(String::from("# connection lost"));
+                        return;
+                    }
                 };
                 let mut c = c.lock().await;
                 let mut stream = match c.system_shell(input_rx).await {
                     Ok(s) => s,
-                    Err(_) => return,
+                    Err(e) => {
+                        buffer
+                            .lock()
+                            .unwrap()
+                            .push(format!("# failed to open shell: {e}"));
+                        return;
+                    }
                 };
                 drop(c);
+
                 use tokio_stream::StreamExt;
                 while let Some(result) = stream.next().await {
                     match result {
@@ -539,9 +553,15 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
                                 }
                             }
                         }
-                        Err(_) => break,
+                        Err(_) => {
+                            // gRPC stream error — session ended
+                            break;
+                        }
                     }
                 }
+                // Stream ended — shell exited
+                let mut buf = buffer.lock().unwrap();
+                buf.push(String::from("# shell session ended"));
             });
 
             Task::done(Message::Info(format!("Shell opened on {name}")))
@@ -569,7 +589,7 @@ pub fn update(app: &mut RoverApp, message: Message) -> Task<Message> {
             if let Some(ref tx) = app.terminal_sender {
                 let mut data = cmd.into_bytes();
                 data.push(b'\n');
-                let _ = tx.try_send(rover_proto::v1::ShellInput { data });
+                let _ = tx.send(rover_proto::v1::ShellInput { data });
             }
             Task::none()
         }
